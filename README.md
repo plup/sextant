@@ -1,3 +1,3 @@
 # Sextant
 
-*Navigate from astronomical events*
+*Navigate through cosmic events*
