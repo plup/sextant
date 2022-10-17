@@ -2,10 +2,12 @@
 
 import click
 import yaml
-import json
+from functools import update_wrapper
 from importlib import metadata
+from rich import print
 from rich.table import Table
 from rich.console import Console
+from requests.exceptions import HTTPError
 from .auth.okta import get_credentials
 from .thehive import TheHiveClient
 
@@ -16,7 +18,7 @@ def format(results, fields, title):
     rows = []
     for result in results:
         # force returning name for files
-        if result['dataType'] == 'file':
+        if result.get('dataType') == 'file':
             result['data'] = result['attachment']['name']
         rows.append([str(result[k]) for k in fields])
 
@@ -28,6 +30,15 @@ def format(results, fields, title):
         table.add_row(*row)
 
     return table
+
+def handle_errors(f):
+    @click.pass_context
+    def run(ctx, *args, **kwargs):
+        try:
+            return ctx.invoke(f, *args, **kwargs)
+        except HTTPError as e:
+            print(f'[bold red]{e}[/bold red]')
+    return update_wrapper(run, f)
 
 # click entrypoint
 @click.group()
@@ -56,6 +67,7 @@ def obs(thehive):
 
 @obs.command()
 @click.pass_obj
+@handle_errors
 def types(thehive):
     """Display all observable types."""
     fields = ['name', 'isAttachment', 'createdBy']
@@ -66,6 +78,7 @@ def types(thehive):
 @obs.command()
 @click.option('--ioc', is_flag=True)
 @click.pass_obj
+@handle_errors
 def search(thehive, ioc):
     """Search across observables."""
     fields = ['id', 'dataType', 'ioc', 'sighted', 'tlp', 'data']

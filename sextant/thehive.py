@@ -39,10 +39,9 @@ class TheHiveClient(object):
 
     def types(self):
         """Get all observables types available."""
-        resp = self.client.get_observable_types()
-        if resp.status_code != 200:
-            raise Exception('error')
-        return resp.json()
+        r = self.client.get_observable_types()
+        r.raise_for_status()
+        return r.json()
 
     def iocs(self):
         """Get all IOCs."""
