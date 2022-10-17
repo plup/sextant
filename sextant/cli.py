@@ -8,6 +8,7 @@ from rich import print
 from rich.table import Table
 from rich.console import Console
 from requests.exceptions import HTTPError
+from thehive4py.query import Eq, And
 from .auth.okta import get_credentials
 from .thehive import TheHiveClient
 
@@ -73,17 +74,30 @@ def types(thehive):
     fields = ['name', 'isAttachment', 'createdBy']
     results = thehive.types()
     table = format(results, fields, 'Observable types')
-    Console().print(table)
+    print(table)
+    print(f'objects: {len(results)}')
 
 @obs.command()
 @click.option('--ioc', is_flag=True)
+@click.option('--sighted', is_flag=True)
+@click.option('-t', '--type')
 @click.pass_obj
 @handle_errors
-def search(thehive, ioc):
+def search(thehive, ioc, sighted, type):
     """Search across observables."""
     fields = ['id', 'dataType', 'ioc', 'sighted', 'tlp', 'data']
+    params = []
 
     if ioc:
-        results = thehive.iocs()
-        table = format(results, fields, 'IOCs')
-        Console().print(table)
+        params.append(Eq('ioc', True))
+
+    if sighted:
+        params.append(Eq('sighted', True))
+
+    if type:
+        params.append(Eq('dataType', type))
+
+    results = thehive.search(And(*params))
+    table = format(results, fields, 'Observables')
+    print(table)
+    print(f'objects: {len(results)}')
