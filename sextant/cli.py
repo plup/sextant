@@ -7,8 +7,9 @@ from importlib import metadata
 from rich import print
 from rich.table import Table
 from rich.console import Console
-from requests.exceptions import HTTPError
 from thehive4py.query import Eq, And
+from thehive4py.exceptions import TheHiveException
+from requests.exceptions import HTTPError
 from .auth.okta import get_credentials
 from .thehive import TheHiveClient
 
@@ -51,7 +52,11 @@ def main(ctx, config):
     """Navigate through cosmic events."""
     with open(config) as f:
        conf = yaml.safe_load(f)
-       ctx.obj = TheHiveClient(conf['thehive'])
+       ctx.obj = TheHiveClient(
+            conf['thehive']['endpoint'],
+            conf['thehive']['apikey'],
+            version = 4,
+            cert = False)
 
 # okta commands
 @main.command()
@@ -72,7 +77,7 @@ def obs(thehive):
 def types(thehive):
     """Display all observable types."""
     fields = ['name', 'isAttachment', 'createdBy']
-    results = thehive.types()
+    results = thehive.get_observable_types()
     table = format(results, fields, 'Observable types')
     print(table)
     print(f'objects: {len(results)}')
@@ -97,7 +102,17 @@ def search(thehive, ioc, sighted, type):
     if type:
         params.append(Eq('dataType', type))
 
-    results = thehive.search(And(*params))
+    results = thehive.find_observables(query=And(*params))
     table = format(results, fields, 'Observables')
     print(table)
     print(f'objects: {len(results)}')
+
+@obs.command()
+@click.argument('id', type=int)
+@click.pass_obj
+def get(thehive, id):
+    try:
+        observable = thehive.get_case_observable(f'~{id}')
+        print(observable)
+    except TheHiveException as e:
+        print(f'[bold red]{e}[/bold red]')

@@ -2,40 +2,49 @@
 import requests
 from thehive4py.api import TheHiveApi
 from thehive4py.query import Eq, And
+from functools import wraps, update_wrapper
+from thehive4py.exceptions import *
+from requests.exceptions import *
+from urllib3.exceptions import InsecureRequestWarning
 
 
-class TheHiveApiExt(TheHiveApi):
-    """Extends The Hive API."""
-    def get_fields(self):
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+
+class TheHiveClient(TheHiveApi):
+    """Extends The Hive API and adds client methods."""
+    def raise_for_status(f):
+        """Wraps the method forcing error status code to raise exceptions."""
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            try:
+                r = f(self, *args, **kwargs)
+                r.raise_for_status()
+                return r.json()
+            except HTTPError as e:
+                raise ObservableException(e.response.json().get('message'))
+        return wrapper
+
+    @raise_for_status
+    def get_case_observable(self, *args, **kwargs):
+        return super().get_case_observable(*args, **kwargs)
+
+    @raise_for_status
+    def find_observables(self, *args, **kwargs):
+        return super().find_observables(*args, **kwargs)
+
+    def get_custom_fields(self):
         """Returns a list of existing custom fields."""
         req = f'{self.url}/api/customField'
         try:
-            return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
-        except requests.exceptions.RequestException as e:
+            return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert).json()
+        except RequestException:
             raise CustomFieldException("Can't retreive custom fields")
 
     def get_observable_types(self):
         """Returns a list of existing observable types."""
         req = f'{self.url}/api/observable/type?range=all'
         try:
-            return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
-        except requests.exceptions.RequestException as e:
+            return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert).json()
+        except RequestException:
             raise CustomFieldException("Can't retreive observable types")
-
-
-class TheHiveClient(object):
-    """Making the request to The Hive backend."""
-    def __init__(self, config):
-        self.client = TheHiveApiExt(config['endpoint'], config['apikey'], cert=False)
-
-    def types(self):
-        """Get all observables types available."""
-        r = self.client.get_observable_types()
-        r.raise_for_status()
-        return r.json()
-
-    def search(self, query):
-        """Search."""
-        r = self.client.find_observables(query=query, sort=[], range='all')
-        r.raise_for_status()
-        return r.json()
