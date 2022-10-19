@@ -62,12 +62,19 @@ def main(ctx, config):
             cert = False)
        # initiate the splunk client
        ctx.obj['splunk'] = SplunkClient(conf['splunk']['endpoint'])
+       # store okta test config
+       ctx.obj['okta'] = conf['okta']
 
 # okta commands
 @main.command()
-def okta():
+@click.pass_context
+def okta(ctx):
     """Test Okta authentication with Yubikey."""
-    get_credentials()
+    get_credentials(
+        endpoint = ctx.obj['okta']['endpoint'],
+        app_link = ctx.obj['okta']['app_link'],
+        login = ctx.obj['okta']['login']
+    )
     click.echo('ok')
 
 # splunk commands
