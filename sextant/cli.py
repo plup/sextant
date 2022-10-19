@@ -12,6 +12,7 @@ from thehive4py.exceptions import TheHiveException
 from requests.exceptions import HTTPError
 from .auth.okta import get_credentials
 from .thehive import TheHiveClient
+from .splunk import SplunkClient
 
 
 def format(results, fields, title):
@@ -50,13 +51,17 @@ def handle_errors(f):
 @click.pass_context
 def main(ctx, config):
     """Navigate through cosmic events."""
+    ctx.ensure_object(dict)
     with open(config) as f:
        conf = yaml.safe_load(f)
-       ctx.obj = TheHiveClient(
+       # initiate the hive client
+       ctx.obj['thehive'] = TheHiveClient(
             conf['thehive']['endpoint'],
             conf['thehive']['apikey'],
             version = 4,
             cert = False)
+       # initiate the splunk client
+       ctx.obj['splunk'] = SplunkClient(conf['splunk']['endpoint'])
 
 # okta commands
 @main.command()
@@ -65,11 +70,20 @@ def okta():
     get_credentials()
     click.echo('ok')
 
+# splunk commands
+@main.command()
+@click.pass_context
+def splunk(ctx):
+    """Test Splunk authentication with tokens."""
+    ctx.obj['splunk'].check_tokens()
+
 # thehive commands
 @main.group()
-@click.pass_obj
-def obs(thehive):
+@click.pass_context
+def obs(ctx):
     """Manage observables."""
+    # rearrange context to pass the client as object
+    ctx.obj = ctx.obj['thehive']
 
 @obs.command()
 @click.pass_obj
@@ -116,3 +130,4 @@ def get(thehive, id):
         print(observable)
     except TheHiveException as e:
         print(f'[bold red]{e}[/bold red]')
+
