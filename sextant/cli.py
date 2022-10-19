@@ -9,7 +9,6 @@ from rich.table import Table
 from rich.console import Console
 from thehive4py.query import Eq, And
 from thehive4py.exceptions import TheHiveException
-from requests.exceptions import HTTPError
 from .auth.okta import get_credentials
 from .thehive import TheHiveClient
 from .splunk import SplunkClient
@@ -39,7 +38,7 @@ def handle_errors(f):
     def run(ctx, *args, **kwargs):
         try:
             return ctx.invoke(f, *args, **kwargs)
-        except HTTPError as e:
+        except TheHiveException as e:
             print(f'[bold red]{e}[/bold red]')
     return update_wrapper(run, f)
 
@@ -131,10 +130,8 @@ def search(thehive, ioc, sighted, type):
 @obs.command()
 @click.argument('id', type=int)
 @click.pass_obj
+@handle_errors
 def get(thehive, id):
-    try:
-        observable = thehive.get_case_observable(f'~{id}')
-        print(observable)
-    except TheHiveException as e:
-        print(f'[bold red]{e}[/bold red]')
+    observable = thehive.get_case_observable(f'~{id}')
+    print(observable)
 
