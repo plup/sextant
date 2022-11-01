@@ -1,7 +1,7 @@
 """Contains the CLI commands."""
 
 import click
-import yaml
+import confuse
 from functools import update_wrapper
 from importlib import metadata
 from rich import print
@@ -9,9 +9,9 @@ from rich.table import Table
 from rich.console import Console
 from thehive4py.query import Eq, And
 from thehive4py.exceptions import TheHiveException
+from splunklib import client
 from .auth.okta import get_credentials
 from .thehive import TheHiveClient
-from .splunk import SplunkClient
 
 
 def format(results, fields, title):
@@ -42,6 +42,7 @@ def handle_errors(f):
             print(f'[bold red]{e}[/bold red]')
     return update_wrapper(run, f)
 
+
 # click entrypoint
 @click.group()
 @click.option('-c', '--config', envvar='SEXTANT_CONFIG', type=click.Path(exists=True),
@@ -50,46 +51,46 @@ def handle_errors(f):
 @click.pass_context
 def main(ctx, config):
     """Navigate through cosmic events."""
-    ctx.ensure_object(dict)
-    with open(config) as f:
-       conf = yaml.safe_load(f)
-       # initiate the hive client
-       ctx.obj['thehive'] = TheHiveClient(
-            conf['thehive']['endpoint'],
-            conf['thehive']['apikey'],
-            version = 4,
-            cert = False)
-       # initiate the splunk client
-       ctx.obj['splunk'] = SplunkClient(conf['splunk']['endpoint'])
-       # store okta test config
-       ctx.obj['okta'] = conf['okta']
+    # load the configuration object
+    ctx.obj = confuse.Configuration('sextant')
+    if config:
+        ctx.obj.set_file(config)
+
 
 # okta commands
 @main.command()
-@click.pass_context
-def okta(ctx):
+@click.pass_obj
+def okta(conf):
     """Test Okta authentication with Yubikey."""
     get_credentials(
-        endpoint = ctx.obj['okta']['endpoint'],
-        app_link = ctx.obj['okta']['app_link'],
-        login = ctx.obj['okta']['login']
+        endpoint = conf['okta']['endpoint'].get(),
+        app_link = conf['okta']['app_link'].get(),
+        login = conf['okta']['login'].get()
     )
     click.echo('ok')
 
-# splunk commands
-@main.command()
-@click.pass_context
-def splunk(ctx):
-    """Test Splunk authentication with tokens."""
-    ctx.obj['splunk'].check_tokens()
 
-# thehive commands
+# alert commands
+@main.group()
+def search():
+    """Manage alerts."""
+
+@search.command
+@click.pass_obj
+def list(conf):
+    s = client.connect(username=conf['splunk']['login'].get(),
+                       password=conf['splunk']['password'].get())
+    print(s.indexes.get_default())
+
+
+# observable commands
 @main.group()
 @click.pass_context
 def obs(ctx):
     """Manage observables."""
-    # rearrange context to pass the client as object
-    ctx.obj = ctx.obj['thehive']
+    # pass the hive client as context object for subcommands
+    conf = ctx.obj['thehive']
+    ctx.obj = TheHiveClient(conf['endpoint'].get(), conf['apikey'].get(), version=4, cert=False)
 
 @obs.command()
 @click.pass_obj

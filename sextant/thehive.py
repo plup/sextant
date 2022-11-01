@@ -1,7 +1,7 @@
 """Operations with The Hive."""
 import requests
 from thehive4py.api import TheHiveApi
-from thehive4py.query import Eq, And
+from thehive4py.query import *
 from functools import wraps, update_wrapper
 from thehive4py.exceptions import *
 from requests.exceptions import *
@@ -14,7 +14,10 @@ requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 class TheHiveClient(TheHiveApi):
     """Extends The Hive API and adds client methods."""
     def raise_for_status(f):
-        """Wraps the method forcing error status code to raise exceptions."""
+        """
+        Wraps the method forcing error status code to raise exceptions.
+        Also decodes the response from json.
+        """
         @wraps(f)
         def wrapper(self, *args, **kwargs):
             try:
@@ -22,7 +25,10 @@ class TheHiveClient(TheHiveApi):
                 r.raise_for_status()
                 return r.json()
             except HTTPError as e:
-                raise ObservableException(e.response.json().get('message'))
+                message = e.response.json().get('message')
+                if e.response.status_code == 404:
+                    message = f'Resource {message} not found'
+                raise ObservableException(message)
         return wrapper
 
     @raise_for_status
