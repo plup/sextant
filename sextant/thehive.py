@@ -39,18 +39,37 @@ class TheHiveClient(TheHiveApi):
     def find_observables(self, *args, **kwargs):
         return super().find_observables(*args, **kwargs)
 
+    @raise_for_status
     def get_custom_fields(self):
         """Returns a list of existing custom fields."""
         req = f'{self.url}/api/customField'
-        try:
-            return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert).json()
-        except RequestException:
-            raise CustomFieldException("Can't retreive custom fields")
+        return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
 
+    @raise_for_status
     def get_observable_types(self):
         """Returns a list of existing observable types."""
         req = f'{self.url}/api/observable/type?range=all'
-        try:
-            return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert).json()
-        except RequestException:
-            raise CustomFieldException("Can't retreive observable types")
+        return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
+
+    def get_custom_tags(self):
+        """Returns a list of existing custom tags."""
+
+        req = f'{self.url}/api/v1/query?name=organisation-custom-tags'
+        #params = {
+        #    "range": attributes.get("range", "all"),
+        #    "sort": attributes.get("sort", [])
+        #}
+        filters = {
+  "_name": "filter",
+  "_like": {
+    "_field": "text",
+    "_value": "field*"
+  }
+}
+        query = Like('text', 'field*')
+        print(query)
+        return
+        return self.__find_rows("/api/alert/_search", **attributes)
+
+        payload = {}
+        return request.post(req, proxies=self.proxies, auth=self.auth, verify=self.cert, data=payload)

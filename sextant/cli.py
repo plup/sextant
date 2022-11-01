@@ -2,6 +2,7 @@
 
 import click
 import confuse
+import sys
 from functools import update_wrapper
 from importlib import metadata
 from rich import print
@@ -40,13 +41,16 @@ def handle_errors(f):
             return ctx.invoke(f, *args, **kwargs)
         except TheHiveException as e:
             print(f'[bold red]{e}[/bold red]')
+            sys.exit(1)
+        except confuse.exceptions.NotFoundError as e:
+            print(f'[red]{e} in configuration[/red]')
+            sys.exit(1)
     return update_wrapper(run, f)
 
 
 # click entrypoint
 @click.group()
-@click.option('-c', '--config', envvar='SEXTANT_CONFIG', type=click.Path(exists=True),
-              default='config.yml')
+@click.option('-c', '--config', envvar='SEXTANT_CONFIG', type=click.Path(exists=True))
 @click.version_option(metadata.version(__name__.split('.')[0]))
 @click.pass_context
 def main(ctx, config):
@@ -86,6 +90,7 @@ def list(conf):
 # observable commands
 @main.group()
 @click.pass_context
+@handle_errors
 def obs(ctx):
     """Manage observables."""
     # pass the hive client as context object for subcommands
