@@ -5,10 +5,12 @@ import confuse
 import sys
 from functools import update_wrapper
 from importlib import metadata
+from pathlib import Path
 from rich import print
 from rich.table import Table
 from rich.console import Console
 from thehive4py.query import Eq, And
+from thehive4py.models import Case, CaseObservable
 from thehive4py.exceptions import TheHiveException
 from splunklib import client
 from .auth.okta import get_credentials
@@ -138,6 +140,29 @@ def search(thehive, ioc, sighted, type):
 @click.pass_obj
 @handle_errors
 def get(thehive, id):
+    """Retrieve details about an observable."""
     observable = thehive.get_case_observable(f'~{id}')
     print(observable)
+
+@obs.command()
+@click.argument('id')
+@click.argument('content')
+@click.option('-t', '--type', help='Type of the observable')
+@click.option('--ioc', is_flag=True)
+@click.option('--sighted', is_flag=True)
+@click.option('-n', '--notes', help='Notes about the observable')
+@click.pass_obj
+@handle_errors
+def add(thehive, id, content, type, ioc, sighted, notes):
+    """Attach an observable to a case."""
+    if type == 'file':
+        path = Path(content)
+        if not path.is_file():
+            raise Exception('File does not exist')
+        content = str(path)
+
+    observable = CaseObservable(dataType=type, data=content, ioc=ioc, sighted=sighted, message=notes, tlp=2, ignoreSimiliarity=True)
+    results = thehive.create_case_observable(f'~{id}', observable)
+    print(results)
+
 
