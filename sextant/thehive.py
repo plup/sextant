@@ -47,12 +47,29 @@ class TheHiveClient(TheHiveApi):
         return wrapper
 
     @raise_errors
-    def get_case_observable(self, *args, **kwargs):
-        return super().get_case_observable(*args, **kwargs)
+    def create_alert(self, *args, **kwargs):
+        return super().create_alert(*args, **kwargs)
+
+    @raise_errors
+    def get_alert(self, *args, **kwargs):
+        return super().get_alert(*args, **kwargs)
+
+    @raise_errors
+    def find_cases(self, *args, **kwargs):
+        return super().find_cases(*args, **kwargs)
 
     @raise_errors
     def find_observables(self, *args, **kwargs):
         return super().find_observables(*args, **kwargs)
+
+    @raise_errors
+    def get_case_observable(self, *args, **kwargs):
+        return super().get_case_observable(*args, **kwargs)
+
+    @raise_errors
+    def create_case_observable(self, *args, **kwargs):
+        """Adds an observable to an existing case."""
+        return super().create_case_observable(*args, **kwargs)
 
     @raise_errors
     def get_custom_fields(self):
@@ -65,8 +82,3 @@ class TheHiveClient(TheHiveApi):
         """Returns a list of existing observable types."""
         req = f'{self.url}/api/observable/type?range=all'
         return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
-
-    @raise_errors
-    def create_case_observable(self, *args, **kwargs):
-        """Adds an observable to an existing case."""
-        return super().create_case_observable(*args, **kwargs)

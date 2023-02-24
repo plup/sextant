@@ -3,14 +3,16 @@
 import click
 import confuse
 import sys
+import uuid
 from functools import update_wrapper
 from importlib import metadata
 from pathlib import Path
+from csv import DictWriter
 from rich import print
 from rich.table import Table
 from rich.console import Console
 from thehive4py.query import Eq, And
-from thehive4py.models import Case, CaseObservable
+from thehive4py.models import Alert, Case, CaseObservable
 from thehive4py.exceptions import TheHiveException
 from splunklib import client
 from .auth.okta import get_credentials
@@ -62,6 +64,13 @@ def main(ctx, config):
     if config:
         ctx.obj.set_file(config)
 
+# status
+@main.command()
+@click.pass_context
+def status(ctx):
+    conf = ctx.obj['thehive']
+    thehive = TheHiveClient(conf['endpoint'].get(), conf['apikey'].get(), version=4, cert=False)
+    print(thehive.health().text)
 
 # okta commands
 @main.command()
@@ -76,18 +85,111 @@ def okta(conf):
     click.echo('ok')
 
 
-# alert commands
+# source commands
 @main.group()
-def search():
-    """Manage alerts."""
+def source():
+    """Manage alert sources."""
 
-@search.command
+@source.command
 @click.pass_obj
 def list(conf):
     s = client.connect(username=conf['splunk']['login'].get(),
                        password=conf['splunk']['password'].get())
     print(s.indexes.get_default())
 
+# alert commands
+@main.group()
+@click.pass_context
+def alert(ctx):
+    """Manage cases."""
+    conf = ctx.obj['thehive']
+    ctx.obj = TheHiveClient(conf['endpoint'].get(), conf['apikey'].get(), version=4, cert=False)
+
+@alert.command
+@click.argument('id', type=int)
+@click.pass_obj
+def get(thehive, id):
+    alert = thehive.get_alert(f'~{id}')
+    print(alert)
+
+@alert.command
+@click.option('--title')
+@click.option('--description', default='N/A')
+@click.option('--tags', help='List of tags, ex: good,luck')
+@click.pass_obj
+def create(thehive, title, description, tags):
+    alert = Alert(
+        type = 'external',
+        source = 'sextant',
+        sourceRef = str(uuid.uuid4())[0:6],
+        title = title,
+        description = description,
+        tags = tags.split(','),
+    )
+    alert = thehive.create_alert(alert)
+    print(alert)
+
+@alert.command
+@click.argument('id', type=int)
+@click.option('--field', help='One field to update, ex: title=Alert')
+@click.option('--tags', help='List of tags, ex: good,luck')
+@click.pass_obj
+def update(thehive, id, field, tags):
+    # FIXME: pass a dynamic list of options --title "new title" --tags good,luck
+    try:
+        fields = []
+        alert = thehive.get_alert(f'~{id}')
+        if field:
+            key, value = field.split('=')
+            alert[key] = value
+        if tags:
+            fields.append('tags')
+            alert['tags'] = tags.split(',')
+        alert = thehive.update_alert(alert=Alert(json=alert), alert_id=f'~{id}', fields=fields)
+        print(alert)
+    except ValueError:
+        print('Wrong format for parameters')
+
+# case commands
+@main.group()
+@click.pass_context
+def case(ctx):
+    """Manage cases."""
+    conf = ctx.obj['thehive']
+    ctx.obj = TheHiveClient(conf['endpoint'].get(), conf['apikey'].get(), version=4, cert=False)
+
+@case.command
+@click.option('--csv', is_flag=True)
+@click.pass_obj
+@handle_errors
+def list(thehive, csv):
+    """Display all summaries."""
+    params = []
+    results = thehive.find_cases(query=And(*params))
+    fields = [
+        'flag',
+        'startDate',
+        'endDate',
+        'title',
+        'description',
+        'createdAt',
+        'createdBy',
+        'caseId',
+        'id',
+        'pap',
+        'tlp',
+        'status',
+        'summary',
+        'tags',
+    ]
+
+    if csv:
+        writer = DictWriter(sys.stdout, fieldnames=fields, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(results)
+        return
+
+    print(results)
 
 # observable commands
 @main.group()
@@ -114,9 +216,10 @@ def types(thehive):
 @click.option('--ioc', is_flag=True)
 @click.option('--sighted', is_flag=True)
 @click.option('-t', '--type')
+@click.option('--csv', is_flag=True)
 @click.pass_obj
 @handle_errors
-def search(thehive, ioc, sighted, type):
+def search(thehive, ioc, sighted, type, csv):
     """Search across observables."""
     fields = ['id', 'dataType', 'ioc', 'sighted', 'tlp', 'data']
     params = []
@@ -131,6 +234,11 @@ def search(thehive, ioc, sighted, type):
         params.append(Eq('dataType', type))
 
     results = thehive.find_observables(query=And(*params))
+
+    if csv:
+        print(results)
+        return
+
     table = format(results, fields, 'Observables')
     print(table)
     print(f'objects: {len(results)}')
