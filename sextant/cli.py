@@ -14,9 +14,6 @@ from rich.console import Console
 from thehive4py.query import Eq, And
 from thehive4py.models import Alert, Case, CaseObservable
 from thehive4py.exceptions import TheHiveException
-from splunklib import client
-from .auth.okta import get_credentials
-from .thehive import TheHiveClient
 
 
 def format(results, fields, title):
@@ -38,64 +35,54 @@ def format(results, fields, title):
 
     return table
 
-def handle_errors(f):
-    @click.pass_context
-    def run(ctx, *args, **kwargs):
-        try:
-            return ctx.invoke(f, *args, **kwargs)
-        except TheHiveException as e:
-            print(f'[bold red]{e}[/bold red]')
-            sys.exit(1)
-        except confuse.exceptions.NotFoundError as e:
-            print(f'[red]{e} in configuration[/red]')
-            sys.exit(1)
-    return update_wrapper(run, f)
-
-
 # click entrypoint
 @click.group()
-@click.option('-c', '--config', envvar='SEXTANT_CONFIG', type=click.Path(exists=True))
+@click.option('--config', envvar='SEXTANT_CONFIG', type=click.Path(exists=True))
+@click.option('-c', '--context', help='Context to use from the config')
 @click.version_option(metadata.version(__name__.split('.')[0]))
 @click.pass_context
-def main(ctx, config):
-    """Navigate through cosmic events."""
+def main(ctx, config, context):
+    """Find your way through cosmic events."""
     # load the configuration object
-    ctx.obj = confuse.Configuration('sextant')
+    config_obj = confuse.Configuration('sextant')
     if config:
-        ctx.obj.set_file(config)
+        config_obj.set_file(config)
+
+    # extend defaults with selected context
+    conf = config_obj['contexts']['default'].get()
+    if context:
+        conf.update(config_obj['contexts'][context].get())
+
+    # register plugins
+    plugins = {}
+    try:
+        from .thehive import TheHivePlugin
+        plugins['thehive'] = TheHivePlugin(**conf['thehive'])
+    except KeyError as e:
+        print(f'TheHive: error when registering: {e} not found')
+
+    try:
+        from .splunk import SplunkPlugin
+        plugins['splunk'] = SplunkPlugin(**conf['splunk'])
+    except KeyError as e:
+        print(f'Error when registering Splunk: {e}')
+
+    ctx.obj = plugins
+
+# config
+@main.command()
+@click.pass_obj
+def config(config):
+    """Display current configuration."""
+    print(config)
 
 # status
 @main.command()
-@click.pass_context
-def status(ctx):
-    conf = ctx.obj['thehive']
-    thehive = TheHiveClient(conf['endpoint'].get(), conf['apikey'].get(), version=4, cert=False)
-    print(thehive.health().text)
-
-# okta commands
-@main.command()
 @click.pass_obj
-def okta(conf):
-    """Test Okta authentication with Yubikey."""
-    get_credentials(
-        endpoint = conf['okta']['endpoint'].get(),
-        app_link = conf['okta']['app_link'].get(),
-        login = conf['okta']['login'].get()
-    )
-    click.echo('ok')
-
-
-# source commands
-@main.group()
-def source():
-    """Manage alert sources."""
-
-@source.command
-@click.pass_obj
-def list(conf):
-    s = client.connect(username=conf['splunk']['login'].get(),
-                       password=conf['splunk']['password'].get())
-    print(s.indexes.get_default())
+def status(plugins):
+    """Check states of all registered components."""
+    for name, plugin in plugins.items():
+        print(plugin.check())
 
 # alert commands
 @main.group()
@@ -161,7 +148,6 @@ def case(ctx):
 @case.command
 @click.option('--csv', is_flag=True)
 @click.pass_obj
-@handle_errors
 def list(thehive, csv):
     """Display all summaries."""
     params = []
@@ -194,7 +180,6 @@ def list(thehive, csv):
 # observable commands
 @main.group()
 @click.pass_context
-@handle_errors
 def obs(ctx):
     """Manage observables."""
     # pass the hive client as context object for subcommands
@@ -203,7 +188,6 @@ def obs(ctx):
 
 @obs.command()
 @click.pass_obj
-@handle_errors
 def types(thehive):
     """Display all observable types."""
     fields = ['name', 'isAttachment', 'createdBy']
@@ -218,7 +202,6 @@ def types(thehive):
 @click.option('-t', '--type')
 @click.option('--csv', is_flag=True)
 @click.pass_obj
-@handle_errors
 def search(thehive, ioc, sighted, type, csv):
     """Search across observables."""
     fields = ['id', 'dataType', 'ioc', 'sighted', 'tlp', 'data']
@@ -246,7 +229,6 @@ def search(thehive, ioc, sighted, type, csv):
 @obs.command()
 @click.argument('id', type=int)
 @click.pass_obj
-@handle_errors
 def get(thehive, id):
     """Retrieve details about an observable."""
     observable = thehive.get_case_observable(f'~{id}')
@@ -260,7 +242,6 @@ def get(thehive, id):
 @click.option('--sighted', is_flag=True)
 @click.option('-n', '--notes', help='Notes about the observable')
 @click.pass_obj
-@handle_errors
 def add(thehive, id, content, type, ioc, sighted, notes):
     """Attach an observable to a case."""
     if type == 'file':
