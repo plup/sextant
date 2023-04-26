@@ -12,7 +12,6 @@ class SplunkPlugin(PluginCore):
                 app_link = auth_config['app_link'],
                 login = auth_config['login'],
             )
-            click.echo('ok')
         #self.service = client.connect()
 
     def check(self):
