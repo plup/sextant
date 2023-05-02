@@ -1,25 +1,22 @@
 import logging
 import requests
 import base64
-from getpass import getpass
 from .webauthn import WebAuthnClient
 from fido2.server import Fido2Server
+from bs4 import BeautifulSoup as Soup
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 class OktaClient(object):
-
-    def __init__(self, username, password, endpoint, app_link):
+    """Client for Okta authentication supporting WebAuthn only."""
+    def __init__(self, username, password, endpoint):
         """Set parameters for Okta only."""
-        self.logger = logger
-        self.factor = 'OKTA'
         self.username = username
         self.password = password
-        self.app_link = app_link
-        self.https_base_uri = endpoint
-        self.auth_url = f'{self.https_base_uri}/api/v1/authn'
+        self.base_uri = endpoint
+        self.auth_url = f'{self.base_uri}/api/v1/authn'
 
         self.session = requests.Session()
         self.session_token = ''
@@ -44,10 +41,7 @@ class OktaClient(object):
         return session_token
 
     def check_mfa(self, state_token, factors):
-        """
-        Hanlde Multi factore authentication.
-        Only supports WebAuthn.
-        """
+        """Hanlde multifactor authentication."""
         # filter webauthn factor
         try:
             factor = next(item for item in factors if item['factorType'] == 'webauthn')
@@ -76,7 +70,7 @@ class OktaClient(object):
 
         # make the webauthn signature
         webauthn = WebAuthnClient(
-                url = self.https_base_uri,
+                url = self.base_uri,
                 authenticator = authenticator_name,
                 user_verification = user_verification,
             )
@@ -105,13 +99,19 @@ class OktaClient(object):
         return r['sessionToken']
 
 
-def get_credentials(login, endpoint, app_link):
+class OktaSamlClient(OktaClient):
 
-    okta = OktaClient(
-            login,
-            getpass(),
-            endpoint = endpoint,
-            app_link = app_link
-    )
-    print(okta.auth())
+    def __init__(self, app_name, app_id, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.saml_url = f'{self.base_uri}/app/{app_name}/{app_id}/sso/saml'
 
+    def auth(self):
+        """Add the SAML part retreiving the assertion."""
+        # fetch a session token
+        session_token = super().auth()
+        # fetch the SAML response
+        r = self.session.get(self.saml_url, params={'onetimetoken': session_token})
+        r.raise_for_status()
+        # return the SAML assertion
+        soup = Soup(r.text, 'html.parser')
+        return soup.find(attrs={'name': 'SAMLResponse'}).get('value')

@@ -7,13 +7,14 @@ from fido2.utils import websafe_decode
 
 logger = logging.getLogger(__name__)
 
+
 class CliInteraction(UserInteraction):
 
     def prompt_up(self):
         print("Touch your security key...\n")
 
     def request_pin(self, permissions, rd_id):
-        return getpass("Enter PIN: ")
+        return getpass("FIDO2 PIN: ")
 
 
 class WebAuthnClient(object):
@@ -51,7 +52,7 @@ class WebAuthnClient(object):
             return assertions.get_response(0)
 
         except Fido2ClientError as e:
-            if e.code == ClientError.ERR.DEVICE_INELIGIBLE:
+            if e.code == Fido2ClientError.ERR.DEVICE_INELIGIBLE:
                 logger.error('Security key is ineligible')
             raise RuntimeError(f'No credential retreived from Yubikey: {e}')
 
