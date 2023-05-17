@@ -6,7 +6,6 @@ from fido2.server import Fido2Server
 from bs4 import BeautifulSoup as Soup
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class OktaClient(object):

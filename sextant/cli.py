@@ -1,5 +1,5 @@
 """Contains the CLI commands."""
-
+import argparse
 import click
 import confuse
 import sys
@@ -35,57 +35,54 @@ def format(results, fields, title):
 
     return table
 
-# click entrypoint
-@click.group()
-@click.option('--config', envvar='SEXTANT_CONFIG', type=click.Path(exists=True))
-@click.option('-c', '--context', help='Context to use from the config')
-@click.version_option(metadata.version(__name__.split('.')[0]))
-@click.pass_context
-def main(ctx, config, context):
-    """Find your way through cosmic events."""
-    # load the configuration object
-    config_obj = confuse.Configuration('sextant')
-    if config:
-        config_obj.set_file(config)
 
-    # extend defaults with selected context
-    conf = config_obj['contexts']['default'].get()
+def load(context=None):
+
+    version = metadata.version(__name__.split('.')[0])
+    config = confuse.Configuration('sextant')
+
+    parser = argparse.ArgumentParser(formatter_class = argparse.RawDescriptionHelpFormatter,
+                                    description='Find your way through celestial events.')
+    parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
+    parser.add_argument('--status', action='store_true', help='Check submodules connectivity')
+
+    module_parsers = parser.add_subparsers(dest='module', help='Modules')
+
+    # select context
     if context:
-        conf.update(config_obj['contexts'][context].get())
+        conf = config['contexts'][context].get()
+    else:
+        conf = next(iter(config['contexts'].values())).get()
 
     # register plugins
-    plugins = {}
-    try:
-        from .thehive import TheHivePlugin
-        plugins['thehive'] = TheHivePlugin(**conf['thehive'])
-    except KeyError as e:
-        print(f'TheHive: error when registering: {e} not found')
-
+    plugins = []
     try:
         from .splunk import SplunkPlugin
-        plugins['splunk'] = SplunkPlugin(**conf['splunk'])
+        plugins.append(SplunkPlugin(module_parsers, **conf['splunk']))
+
+        from .thehive import ThehivePlugin
+        plugins.append(ThehivePlugin(module_parsers, **conf['thehive']))
+
     except KeyError as e:
-        print(f'Error when registering Splunk: {e}')
+        print(f'Error when registering Splunk: {e} not found')
 
-    ctx.obj = plugins
+    # parsing arguments
+    args = parser.parse_args()
 
-# config
-@main.command()
-@click.pass_obj
-def config(config):
-    """Display current configuration."""
-    print(config)
+    if args.module and args.func:
+        return args.func(args)
 
-# status
-@main.command()
-@click.pass_obj
+    if args.status:
+        return status(plugins)
+
+
 def status(plugins):
     """Check states of all registered components."""
-    for name, plugin in plugins.items():
-        print(plugin.check())
+    for plugin in plugins:
+        print(plugin.name, plugin.check())
 
 # alert commands
-@main.group()
+@click.group()
 @click.pass_context
 def alert(ctx):
     """Manage cases."""
@@ -138,7 +135,7 @@ def update(thehive, id, field, tags):
         print('Wrong format for parameters')
 
 # case commands
-@main.group()
+@click.group()
 @click.pass_context
 def case(ctx):
     """Manage cases."""
@@ -178,7 +175,7 @@ def list(thehive, csv):
     print(results)
 
 # observable commands
-@main.group()
+@click.group()
 @click.pass_context
 def obs(ctx):
     """Manage observables."""

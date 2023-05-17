@@ -7,7 +7,7 @@ from functools import wraps, update_wrapper
 from thehive4py.exceptions import *
 from requests.exceptions import *
 from urllib3.exceptions import InsecureRequestWarning
-from sextant.plugin import PluginCore
+from sextant.plugin import Plugin
 
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -85,10 +85,10 @@ class TheHiveClient(TheHiveApi):
         return requests.get(req, proxies=self.proxies, auth=self.auth, verify=self.cert)
 
 
-class TheHivePlugin(TheHiveApi, PluginCore):
-
+class ThehivePlugin(Plugin):
+    name = 'thehive'
     def __init__(self, *args, **kwargs):
-        super().__init__(
+        self.client = TheHiveApi(
                 kwargs['endpoint'],
                 kwargs['auth']['apikey'],
                 version = 5,
@@ -97,7 +97,7 @@ class TheHivePlugin(TheHiveApi, PluginCore):
 
     def check(self, verbose=False):
         try:
-            self.health().text
+            self.client.health().text
             return True
         except TheHiveException as e:
             return False
