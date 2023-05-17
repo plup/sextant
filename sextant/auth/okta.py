@@ -30,14 +30,14 @@ class OktaClient(object):
         r.raise_for_status()
         r = r.json()
 
-        if r['status'] == 'SUCCESS':
-            session_token = r['sessionToken']
-        elif r['status'] == 'MFA_REQUIRED':
-            session_token = self.check_mfa(r['stateToken'], r['_embedded']['factors'])
-        elif r['status'] == 'UNAUTHENTICATED':
+        if r['status'] == 'UNAUTHENTICATED':
             raise RuntimeError('Wrong credentials')
 
-        return session_token
+        if r['status'] == 'SUCCESS':
+            return r['sessionToken']
+
+        if r['status'] == 'MFA_REQUIRED':
+            return self.check_mfa(r['stateToken'], r['_embedded']['factors'])
 
     def check_mfa(self, state_token, factors):
         """Hanlde multifactor authentication."""
