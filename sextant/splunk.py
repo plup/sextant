@@ -17,8 +17,10 @@ class SplunkPlugin(Plugin):
         parser.set_defaults(func=self.search)
 
         parser = subparsers.add_parser('savedsearch', help='Find savedsearches')
+        parser.add_argument('--name', nargs='?', help='Filter on search name')
         parser.add_argument('--user', nargs='?', help='Filter on username')
         parser.add_argument('--action', nargs='?', help='Filter on action')
+        parser.add_argument('--count', type=int, default=0, help='Limit the results')
         parser.add_argument('--migrate', action='store_true', help='Update the alert configuration.')
         parser.set_defaults(func=self.savedsearch)
 
@@ -58,25 +60,29 @@ class SplunkPlugin(Plugin):
         except requests.exceptions.HTTPError as e:
             print(f"Error: {r.json()['messages'][0]['text']}")
 
-    def savedsearch(self, *args, user=None, action=None, migrate=False, **kwargs):
+    def savedsearch(self, *args, name=None, user=None, action=None, count=0, migrate=False, **kwargs):
         """
         Find saved searches.
         Support filtering on username.
         """
         try:
-            payload = {'output_mode': 'json'}
-            # build filters
+            payload = {'output_mode': 'json', 'count': count, 'search': []}
+            # build search filters
             if user:
-                payload['search'] = f'eai:acl.owner={user}'
+                payload['search'].append(f'eai:acl.owner={user}')
+            if name:
+                payload['search'].append(f'name="*{name}*"')
             r = self.session.get(f'{self.endpoint}:8089/services/saved/searches', params=payload)
             r.raise_for_status()
             results = r.json()['entry']
+            total = r.json()['paging']['total']
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 400:
                 print(f"Error: {r.json()['messages'][0]['text']}")
             else:
                 print(e)
+            return
 
         # filter on action
         if action:
@@ -92,6 +98,7 @@ class SplunkPlugin(Plugin):
             table.add_row(item['name'], item['content']['actions'])
         console = Console()
         console.print(table)
+        console.print(f'total: {total}')
 
     def migrate(self, alerts):
         """Migrate alerts to new app."""
