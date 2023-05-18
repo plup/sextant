@@ -1,5 +1,5 @@
 """Contains the CLI commands."""
-import argparse
+from argparse import ArgumentParser
 import click
 import confuse
 import sys
@@ -41,12 +41,14 @@ def load(context=None):
     version = metadata.version(__name__.split('.')[0])
     config = confuse.Configuration('sextant')
 
-    parser = argparse.ArgumentParser(formatter_class = argparse.RawDescriptionHelpFormatter,
-                                    description='Find your way through celestial events.')
+    # main parser
+    parser = ArgumentParser(description='Find your way through celestial events.')
     parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
+    parser.add_argument('--verbose', action='store_true', help='Logging level')
     parser.add_argument('--status', action='store_true', help='Check submodules connectivity')
 
-    module_parsers = parser.add_subparsers(dest='module', help='Modules')
+    # sub parsers for modules
+    subparsers = parser.add_subparsers(dest='modules', help='Modules')
 
     # select context
     if context:
@@ -58,23 +60,32 @@ def load(context=None):
     plugins = []
     try:
         from .splunk import SplunkPlugin
-        plugins.append(SplunkPlugin(module_parsers, **conf['splunk']))
+        # add a subparser for the plugin
+        plugin_parser = subparsers.add_parser(SplunkPlugin.name, help='Splunk')
+        plugin_subparsers = plugin_parser.add_subparsers(help='Splunk module help')
+        plugins.append(SplunkPlugin(plugin_subparsers, **conf['splunk']))
 
         from .thehive import ThehivePlugin
-        plugins.append(ThehivePlugin(module_parsers, **conf['thehive']))
+        plugin_parser = subparsers.add_parser(ThehivePlugin.name, help='TheHive')
+        plugin_subparsers = plugin_parser.add_subparsers(help='TheHive module help')
+        plugins.append(ThehivePlugin(plugin_subparsers, **conf['thehive']))
 
     except KeyError as e:
         print(f'Error when registering Splunk: {e} not found')
 
-    # parsing arguments
+    # parsing arguments and running code
     args = parser.parse_args()
-
-    if args.module and args.func:
-        return args.func(args)
 
     if args.status:
         return status(plugins)
 
+    if args.modules:
+        try:
+            kwargs = args.__dict__
+            func = kwargs.pop('func')
+            func(**kwargs)
+        except KeyError:
+            parser.print_help()
 
 def status(plugins):
     """Check states of all registered components."""

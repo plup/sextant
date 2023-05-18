@@ -9,17 +9,19 @@ from .auth.okta import OktaClient, OktaSamlClient
 class SplunkPlugin(Plugin):
     name = 'splunk'
 
-    def __init__(self, parsers, *args, **kwargs):
+    def __init__(self, subparsers, *args, **kwargs):
         """Attach a new parser to the subparsers of the main module."""
         # register commands
-        parser = parsers.add_parser('splunk', help='Splunk')
-        parser.set_defaults(func=self.routes)
-        parser.add_argument('--search', nargs='?', help='Run a search')
-        parser.add_argument('--savedsearch', nargs='?', help='Find saved searches')
-        parser.add_argument('--migrate', nargs='?', help='Update configuration of alerts')
+        parser = subparsers.add_parser('search', help='Search command')
+        parser.add_argument('--query', nargs='?', help='Run a search query')
+        parser.set_defaults(func=self.search)
+        #parser.add_argument('--savedsearch', nargs='?', help='Find saved searches')
+        #parser.add_argument('--migrate', nargs='?', help='Update configuration of alerts')
 
         # get splunk params
         self.endpoint = kwargs.get('endpoint')
+
+        # set authentication
         self.auth(kwargs['auth'])
 
     def auth(self, auth_config):
@@ -36,20 +38,12 @@ class SplunkPlugin(Plugin):
             self.session = requests.Session()
             self.session.headers = {"Authorization": f"Bearer {auth_config['token']}"}
 
-    def routes(self, ns):
-        if ns.search:
-            return self.search(ns.search)
-        if ns.savedsearch:
-            return self.savedsearch(ns.savedsearch)
-        if ns.migrate:
-            return self.migrate(ns.migrate)
-
     def check(self):
         r = self.session.get(f'{self.endpoint}:8089/services/apps/local')
         r.raise_for_status()
         return True
 
-    def search(self, query, max_count=100):
+    def search(self, query, *args, max_count=100, **kwargs):
         """Run search queries."""
         try:
             payload = {'search': query, 'output_mode': 'json', 'max_count': max_count}
