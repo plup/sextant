@@ -84,8 +84,11 @@ def load(context=None):
             kwargs = args.__dict__
             func = kwargs.pop('func')
             func(**kwargs)
-        except KeyError:
-            parser.print_help()
+        except KeyError as e:
+            if e == 'func':
+                parser.print_help()
+            else:
+                raise
 
 def status(plugins):
     """Check states of all registered components."""
