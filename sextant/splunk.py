@@ -15,8 +15,12 @@ class SplunkPlugin(Plugin):
         parser = subparsers.add_parser('search', help='Search command')
         parser.add_argument('--query', nargs='?', help='Run a search query')
         parser.set_defaults(func=self.search)
-        #parser.add_argument('--savedsearch', nargs='?', help='Find saved searches')
-        #parser.add_argument('--migrate', nargs='?', help='Update configuration of alerts')
+
+        parser = subparsers.add_parser('savedsearch', help='Find savedsearches')
+        parser.add_argument('--user', nargs='?', help='Filter on username')
+        parser.add_argument('--action', nargs='?', help='Filter on action')
+        parser.add_argument('--migrate', action='store_true', help='Update the alert configuration.')
+        parser.set_defaults(func=self.savedsearch)
 
         # get splunk params
         self.endpoint = kwargs.get('endpoint')
@@ -54,7 +58,7 @@ class SplunkPlugin(Plugin):
         except requests.exceptions.HTTPError as e:
             print(f"Error: {r.json()['messages'][0]['text']}")
 
-    def savedsearch(self, username=None):
+    def savedsearch(self, *args, user=None, action=None, migrate=False, **kwargs):
         """
         Find saved searches.
         Support filtering on username.
@@ -62,11 +66,11 @@ class SplunkPlugin(Plugin):
         try:
             payload = {'output_mode': 'json'}
             # build filters
-            if username:
-                payload['search'] = f'eai:acl.owner={username}'
+            if user:
+                payload['search'] = f'eai:acl.owner={user}'
             r = self.session.get(f'{self.endpoint}:8089/services/saved/searches', params=payload)
             r.raise_for_status()
-            print(r.text)
+            results = r.json()['entry']
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 400:
@@ -74,30 +78,28 @@ class SplunkPlugin(Plugin):
             else:
                 print(e)
 
-    def migrate(self, filters):
-        """Migrate alerts to new app."""
-        # get the alerts
-        try:
-            payload = {'output_mode': 'json'}
-            payload['count'] = 10
-            payload['search'] = 'eai:acl.owner=esssplunkservice'
-            #payload['f'] = ['name', 'content']
-            r = self.session.get(f'{self.endpoint}:8089/services/saved/searches', params=payload)
-            r.raise_for_status()
-            content = r.json()
+        # filter on action
+        if action:
+            results = [item for item in results
+                        if action in item['content']['actions']]
 
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 400:
-                print(f"Error: {r.json()['messages'][0]['text']}")
-            else:
-                print(e)
+        if migrate:
+            return self.migrate(results)
 
-        # select the ones to migrate
-        selected = [item for item in content['entry']
-                    if filters in item['content']['actions']]
-
-        table = Table('alert', 'actions', title='Alert migration')
-        for item in selected:
+        # display results
+        table = Table('search name', 'actions', title='Alerts')
+        for item in results:
             table.add_row(item['name'], item['content']['actions'])
         console = Console()
         console.print(table)
+
+    def migrate(self, alerts):
+        """Migrate alerts to new app."""
+        for alert in alerts:
+            try:
+                id = alert['id']
+                config = alert['content']
+                # map params
+                print(config['actions'])
+
+            except: raise
