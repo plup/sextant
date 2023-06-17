@@ -21,7 +21,6 @@ class SplunkPlugin(Plugin):
         parser.add_argument('--user', nargs='?', help='Filter on username')
         parser.add_argument('--action', nargs='?', help='Filter on action')
         parser.add_argument('--count', type=int, default=0, help='Limit the results')
-        parser.add_argument('--migrate', action='store_true', help='Update the alert configuration.')
         parser.set_defaults(func=self.savedsearch)
 
         # get splunk params
@@ -89,9 +88,6 @@ class SplunkPlugin(Plugin):
             results = [item for item in results
                         if action in item['content']['actions']]
 
-        if migrate:
-            return self.migrate(results)
-
         # display results
         table = Table('search name', 'actions', title='Alerts')
         for item in results:
@@ -99,14 +95,3 @@ class SplunkPlugin(Plugin):
         console = Console()
         console.print(table)
         console.print(f'total: {total}')
-
-    def migrate(self, alerts):
-        """Migrate alerts to new app."""
-        for alert in alerts:
-            try:
-                id = alert['id']
-                config = alert['content']
-                # map params
-                print(config['actions'])
-
-            except: raise
