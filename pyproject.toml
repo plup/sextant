@@ -1,0 +1,22 @@
+[project]
+name = "sextant"
+version = "0.2.1"
+description = "Wrapper for observations in datalakes"
+authors = [
+    { name = "Plup", email = "plup@plup.io"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "click",
+    "rich",
+    "fido2",
+    "requests",
+    "confuse",
+    "thehive4py",
+    "beautifulsoup4"
+]
+
+[project.scripts]
+sextant = "sextant.cli:load"
+
