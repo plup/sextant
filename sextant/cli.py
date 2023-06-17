@@ -16,26 +16,6 @@ from thehive4py.models import Alert, Case, CaseObservable
 from thehive4py.exceptions import TheHiveException
 
 
-def format(results, fields, title):
-    """Turns list of objects in a table."""
-    # filter output
-    rows = []
-    for result in results:
-        # force returning name for files
-        if result.get('dataType') == 'file':
-            result['data'] = result['attachment']['name']
-        rows.append([str(result[k]) for k in fields])
-
-    # build the table
-    table = Table(title=title)
-    for field in fields:
-        table.add_column(field)
-    for row in rows:
-        table.add_row(*row)
-
-    return table
-
-
 def load(context=None):
 
     version = metadata.version(__name__.split('.')[0])
@@ -187,82 +167,3 @@ def list(thehive, csv):
         return
 
     print(results)
-
-# observable commands
-@click.group()
-@click.pass_context
-def obs(ctx):
-    """Manage observables."""
-    # pass the hive client as context object for subcommands
-    conf = ctx.obj['thehive']
-    ctx.obj = TheHiveClient(conf['endpoint'].get(), conf['apikey'].get(), version=4, cert=False)
-
-@obs.command()
-@click.pass_obj
-def types(thehive):
-    """Display all observable types."""
-    fields = ['name', 'isAttachment', 'createdBy']
-    results = thehive.get_observable_types()
-    table = format(results, fields, 'Observable types')
-    print(table)
-    print(f'objects: {len(results)}')
-
-@obs.command()
-@click.option('--ioc', is_flag=True)
-@click.option('--sighted', is_flag=True)
-@click.option('-t', '--type')
-@click.option('--csv', is_flag=True)
-@click.pass_obj
-def search(thehive, ioc, sighted, type, csv):
-    """Search across observables."""
-    fields = ['id', 'dataType', 'ioc', 'sighted', 'tlp', 'data']
-    params = []
-
-    if ioc:
-        params.append(Eq('ioc', True))
-
-    if sighted:
-        params.append(Eq('sighted', True))
-
-    if type:
-        params.append(Eq('dataType', type))
-
-    results = thehive.find_observables(query=And(*params))
-
-    if csv:
-        print(results)
-        return
-
-    table = format(results, fields, 'Observables')
-    print(table)
-    print(f'objects: {len(results)}')
-
-@obs.command()
-@click.argument('id', type=int)
-@click.pass_obj
-def get(thehive, id):
-    """Retrieve details about an observable."""
-    observable = thehive.get_case_observable(f'~{id}')
-    print(observable)
-
-@obs.command()
-@click.argument('id')
-@click.argument('content')
-@click.option('-t', '--type', help='Type of the observable')
-@click.option('--ioc', is_flag=True)
-@click.option('--sighted', is_flag=True)
-@click.option('-n', '--notes', help='Notes about the observable')
-@click.pass_obj
-def add(thehive, id, content, type, ioc, sighted, notes):
-    """Attach an observable to a case."""
-    if type == 'file':
-        path = Path(content)
-        if not path.is_file():
-            raise Exception('File does not exist')
-        content = str(path)
-
-    observable = CaseObservable(dataType=type, data=content, ioc=ioc, sighted=sighted, message=notes, tlp=2, ignoreSimiliarity=True)
-    results = thehive.create_case_observable(f'~{id}', observable)
-    print(results)
-
-
