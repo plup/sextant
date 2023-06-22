@@ -87,6 +87,11 @@ class TheHiveClient(TheHiveApi):
         return requests.post(f'{self.url}/api/v1/query', auth=self.auth, verify=self.cert, json=query)
 
     @raise_errors
+    def get_case(self, id_):
+        """Returns the list of dashboards."""
+        return requests.get(f'{self.url}/api/v1/case/{id_}', auth=self.auth, verify=self.cert)
+
+    @raise_errors
     def update_case(self, id_, data):
         """Update the case with new data."""
         return requests.patch(f'{self.url}/api/v1/case/{id_}', auth=self.auth, verify=self.cert, json=data)
@@ -124,8 +129,17 @@ class ThehivePlugin(Plugin):
         query_parser.add_argument('query', type=str, help='Query as JSON string')
         query_parser.set_defaults(func=self.query)
 
-        debug_parser = subparsers.add_parser('fix-customfields', help='Specific update code')
-        debug_parser.set_defaults(func=self.fix_customfields)
+        # register case commands
+        case_parser = subparsers.add_parser('case', help='Case command')
+        case_subparsers = case_parser.add_subparsers(title='cases', description='Manage cases')
+
+        get_case_parser = case_subparsers.add_parser('get', help='Display a case')
+        get_case_parser.add_argument('id', type=str, help='Case ~id')
+        get_case_parser.set_defaults(func=self.get_case)
+
+        # register specifci fix parser
+        fix_parser = subparsers.add_parser('fix-customfields', help='Specific update code')
+        fix_parser.set_defaults(func=self.fix_customfields)
 
         # register observable commands
         obs_parser = subparsers.add_parser('observables', aliases=['obs'], help='Observables command')
@@ -230,6 +244,11 @@ class ThehivePlugin(Plugin):
         results = self.client.create_case_observable(kwargs['id'], observable)
         print(results)
 
+    def get_case(self, *args, **kwargs):
+        """Get a case."""
+        case = self.client.get_case(kwargs['id'])
+        self.display(case)
+
     def list_dashboard(self, *args, **kwargs):
         """List exisitng dashboards."""
         dashboards = self.client.get_dashboards()
@@ -273,11 +292,23 @@ class ThehivePlugin(Plugin):
         options = fields[0]['options']
         cases = self.client.send_query(query={'query':[{"_name":"listCase"}]})
         for case in cases:
+            seen_ids = set()
+            new_fields = []
+
             for field in case['customFields']:
+                # dedpulicate customfields
+                if field['name'] not in seen_ids:
+                    new_fields.append(field)
+                    seen_ids.add(field['name'])
+
+            for field in new_fields:
+                # update specific values
                 if field['name'] == 'investigation-category':
                     if field['value'] == 'Suspicious user activity':
                         field['value'] = 'Suspicious user account activity'
-                        self.client.update_case(case['_id'], {'customFields': case['customFields']})
-                    if field['value'] not in options:
-                        print(case['_id'], field['value'])
-                    # detect all cases with multiple values
+
+            if new_fields != case['customFields']:
+                # the backend doesn't remove the duplicated fields if nothing else changes
+                self.client.update_case(case['_id'], {'customFields': []})
+                self.client.update_case(case['_id'], {'customFields': new_fields})
+                print(f"updated case {case['_id']}")
