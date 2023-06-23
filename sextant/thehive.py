@@ -137,9 +137,9 @@ class ThehivePlugin(Plugin):
         get_case_parser.add_argument('id', type=str, help='Case ~id')
         get_case_parser.set_defaults(func=self.get_case)
 
-        # register specifci fix parser
-        fix_parser = subparsers.add_parser('fix-customfields', help='Specific update code')
-        fix_parser.set_defaults(func=self.fix_customfields)
+        missing_fields_parser = case_subparsers.add_parser('missing-fields', help='Detects missing custom fields')
+        missing_fields_parser.add_argument('--fix', action='store_true', help='Try to fix fields')
+        missing_fields_parser.set_defaults(func=self.missing_fields)
 
         # register observable commands
         obs_parser = subparsers.add_parser('observables', aliases=['obs'], help='Observables command')
@@ -285,12 +285,27 @@ class ThehivePlugin(Plugin):
         print(table)
         print(f'objects: {len(results)}')
 
-    def fix_customfields(self, *args, **kwargs):
-        dry = kwargs.get('dry', False)
+    def missing_fields(self, *args, **kwargs):
+        """Detect specifgic missing custom fields from cases."""
+        fix = kwargs.get('fix', False)
+        verbose = kwargs.get('verbose', False)
+        count = 0
+
         # fecth existing custom fields
-        fields = self.client.send_query(query={'query':[{"_name":"listCustomField"},{"_name":"filter","_eq":{"_field":"name","_value":"investigation-category"}}]})
-        options = fields[0]['options']
-        cases = self.client.send_query(query={'query':[{"_name":"listCase"}]})
+        fields = self.client.send_query(query={'query':[{"_name":"listCustomField"}]})
+        options = {}
+        for field in fields:
+            options[field['name']] = field['options']
+
+        cases = self.client.send_query(
+            query = {
+                'query': [
+                    {"_name": "listCase"},
+                    {"_name": "filter", "_and": [{"_field": "stage", "_value": "Closed"}]},
+                    {"_name": "sort", "_fields": [{"_createdAt": "desc"}]},
+                ]
+            }
+        )
         for case in cases:
             seen_ids = set()
             new_fields = []
@@ -306,15 +321,25 @@ class ThehivePlugin(Plugin):
                 if field['name'] == 'investigation-category':
                     if field['value'] == 'Suspicious user activity':
                         field['value'] = 'Suspicious user account activity'
-                    if field['value'] not in options:
+                    if field['value'] not in options['investigation-category']:
                         field['value'] = 'Other'
 
-            # attribute default category
+            # attribute default fields
             if 'investigation-category' not in [item['name'] for item in new_fields]:
                 new_fields.append({'name':'investigation-category','value':'Other'})
 
+            if 'organizational-unit' not in [item['name'] for item in new_fields]:
+                new_fields.append({'name':'organizational-unit','value':'None'})
+
+            if 'is-incident' not in [item['name'] for item in new_fields]:
+                new_fields.append({'name':'is-incident','value':False})
+
             if new_fields != case['customFields']:
-                # the backend doesn't remove the duplicated fields if nothing else changes
-                self.client.update_case(case['_id'], {'customFields': []})
-                self.client.update_case(case['_id'], {'customFields': new_fields})
-                print(f"updated case {case['_id']}")
+                count += 1
+                if fix:
+                    # the backend doesn't remove the duplicated fields if nothing else changes
+                    self.client.update_case(case['_id'], {'customFields': []})
+                    self.client.update_case(case['_id'], {'customFields': new_fields})
+                    print(f"case {case['_id']} updated")
+                else:
+                    print(f"case {case['_id']} needs fixing")
