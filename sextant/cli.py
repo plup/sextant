@@ -16,25 +16,30 @@ from thehive4py.models import Alert, Case, CaseObservable
 from thehive4py.exceptions import TheHiveException
 
 
-def load(context=None):
+def load():
 
     version = metadata.version(__name__.split('.')[0])
     config = confuse.Configuration('sextant')
 
     # main parser
-    parser = ArgumentParser(description='Find your way through celestial events.')
+    parser = ArgumentParser(description='Find your way through celestial events.', add_help=False)
     parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
-    parser.add_argument('--verbose', action='store_true', help='Logging level')
+    parser.add_argument('-c', '--context', type=str, help='Active context')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Logging level')
     parser.add_argument('--status', action='store_true', help='Check submodules connectivity')
 
-    # sub parsers for modules
-    subparsers = parser.add_subparsers(dest='modules', help='Modules')
+    # parse global arguments
+    args,_ = parser.parse_known_args()
 
     # select context
-    if context:
-        conf = config['contexts'][context].get()
+    if args.context:
+        conf = config['contexts'][args.context].get()
     else:
         conf = next(iter(config['contexts'].values())).get()
+
+    # restore help and set submodules for plugin argument parsing
+    parser.add_argument('-h', '--help', action='help')
+    subparsers = parser.add_subparsers(dest='modules', help='Modules')
 
     # register plugins
     plugins = []
@@ -47,7 +52,7 @@ def load(context=None):
 
         from .thehive import ThehivePlugin
         plugin_parser = subparsers.add_parser(ThehivePlugin.name, help='TheHive')
-        plugin_subparsers = plugin_parser.add_subparsers(help='TheHive module help')
+        plugin_subparsers = plugin_parser.add_subparsers(title=ThehivePlugin.name)
         plugins.append(ThehivePlugin(plugin_subparsers, **conf['thehive']))
 
     except KeyError as e:
@@ -65,10 +70,7 @@ def load(context=None):
             func = kwargs.pop('func')
             func(**kwargs)
         except KeyError as e:
-            if e == 'func':
-                parser.print_help()
-            else:
-                raise
+            parser.print_help()
 
 def status(plugins):
     """Check states of all registered components."""
