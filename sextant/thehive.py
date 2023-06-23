@@ -298,7 +298,7 @@ class ThehivePlugin(Plugin):
             for field in case['customFields']:
                 # dedpulicate customfields
                 if field['name'] not in seen_ids:
-                    new_fields.append(field)
+                    new_fields.append(field.copy()) # avoid changing the object in the case dict
                     seen_ids.add(field['name'])
 
             for field in new_fields:
@@ -306,6 +306,12 @@ class ThehivePlugin(Plugin):
                 if field['name'] == 'investigation-category':
                     if field['value'] == 'Suspicious user activity':
                         field['value'] = 'Suspicious user account activity'
+                    if field['value'] not in options:
+                        field['value'] = 'Other'
+
+            # attribute default category
+            if 'investigation-category' not in [item['name'] for item in new_fields]:
+                new_fields.append({'name':'investigation-category','value':'Other'})
 
             if new_fields != case['customFields']:
                 # the backend doesn't remove the duplicated fields if nothing else changes
