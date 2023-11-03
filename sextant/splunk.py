@@ -16,11 +16,15 @@ class SplunkPlugin(Plugin):
         parser.add_argument('--query', nargs='?', help='Run a search query')
         parser.set_defaults(func=self.search)
 
-        parser = subparsers.add_parser('savedsearch', help='Find savedsearches')
+        parser = subparsers.add_parser('savedsearches', help='Find savedsearches')
         parser.add_argument('--name', nargs='?', help='Filter on search name')
         parser.add_argument('--user', nargs='?', help='Filter on username')
         parser.add_argument('--action', nargs='?', help='Filter on action')
         parser.add_argument('--count', type=int, default=0, help='Limit the results')
+        parser.set_defaults(func=self.savedsearches)
+
+        parser = subparsers.add_parser('savedsearch', help='Get a savedsearch')
+        parser.add_argument('--get', nargs='?', help='Get the search')
         parser.set_defaults(func=self.savedsearch)
 
         # get splunk params
@@ -59,7 +63,7 @@ class SplunkPlugin(Plugin):
         except requests.exceptions.HTTPError as e:
             print(f"Error: {r.json()['messages'][0]['text']}")
 
-    def savedsearch(self, *args, name=None, user=None, action=None, count=0, migrate=False, **kwargs):
+    def savedsearches(self, *args, name=None, user=None, action=None, count=0, **kwargs):
         """
         Find saved searches.
         Support filtering on username.
@@ -95,3 +99,15 @@ class SplunkPlugin(Plugin):
         console = Console()
         console.print(table)
         console.print(f'total: {total}')
+
+    def savedsearch(self, get, *args, **kwargs):
+        """Configuration or actions on a savedsearch."""
+        try:
+            payload = {'output_mode': 'json'}
+            name = requests.utils.quote(get)
+            r = self.session.get(f'{self.endpoint}:8089/services/saved/searches/{name}', params=payload)
+            r.raise_for_status()
+            # directly output the json to be parsed by an external tool
+            print(r.text)
+        except requests.exceptions.HTTPError as e:
+            print(e)
