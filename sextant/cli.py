@@ -60,19 +60,36 @@ def load():
         # register plugins
         plugins = []
         try:
-            from .splunk import SplunkPlugin
+            from sextant.splunk import SplunkPlugin
             # add a subparser for the plugin
             plugin_parser = subparsers.add_parser(SplunkPlugin.name, help='Splunk')
             plugin_subparsers = plugin_parser.add_subparsers(help='Splunk module help')
             plugins.append(SplunkPlugin(plugin_subparsers, **conf['splunk']))
+        except KeyError as e:
+            print(f'No config for {e}')
+        except Exception as e:
+            print(f'Error when registering: {e}')
 
-            from .thehive import ThehivePlugin
+        try:
+            from sextant.thehive import ThehivePlugin
             plugin_parser = subparsers.add_parser(ThehivePlugin.name, help='TheHive')
             plugin_subparsers = plugin_parser.add_subparsers(title=ThehivePlugin.name)
             plugins.append(ThehivePlugin(plugin_subparsers, **conf['thehive']))
-
         except KeyError as e:
-            raise RuntimeError(f'Error when registering: {e} not found')
+            print(f'No config for {e}')
+        except Exception as e:
+            print(f'Error when registering: {e}')
+
+        try:
+            from sextant.sentinelone import Plugin
+            plugin_parser = subparsers.add_parser(Plugin.name, help='SentinelOne')
+            plugin_subparsers = plugin_parser.add_subparsers(title=Plugin.name)
+            plugins.append(Plugin(plugin_subparsers, **conf['sentinelone']))
+        except KeyError as e:
+            print(f'No config for {e}')
+        except Exception as e:
+            print(f'Error when registering: {e}')
+            raise
 
         # parsing arguments and running code
         args = parser.parse_args()

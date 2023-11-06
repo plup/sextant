@@ -10,7 +10,7 @@ from functools import wraps, update_wrapper
 from thehive4py.exceptions import *
 from requests.exceptions import *
 from urllib3.exceptions import InsecureRequestWarning
-from sextant.plugin import Plugin
+from sextant.plugin import BasePlugin
 
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -119,7 +119,7 @@ class TheHiveClient(TheHiveApi):
         return requests.delete(f'{self.url}/api/v1/dashboard/{id_}', auth=self.auth, verify=self.cert)
 
 
-class ThehivePlugin(Plugin):
+class ThehivePlugin(BasePlugin):
     name = 'thehive'
 
     def __init__(self, subparsers, *args, **kwargs):

@@ -1,12 +1,12 @@
+import logging
 import requests
 from rich.console import Console
 from rich.table import Table
-from sextant.plugin import Plugin
-from getpass import getpass
+from sextant.plugin import BasePlugin
 from .auth.okta import OktaClient, OktaSamlClient
 
 
-class SplunkPlugin(Plugin):
+class SplunkPlugin(BasePlugin):
     name = 'splunk'
 
     def __init__(self, subparsers, *args, **kwargs):
@@ -28,6 +28,9 @@ class SplunkPlugin(Plugin):
         parser = subparsers.add_parser('savedsearch', help='Get a savedsearch')
         parser.add_argument('--get', nargs='?', help='Get the search')
         parser.set_defaults(func=self.savedsearch)
+
+        # authenticate
+        self.auth()
 
     def check(self):
         try:
