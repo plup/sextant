@@ -11,6 +11,8 @@ class SplunkPlugin(Plugin):
 
     def __init__(self, subparsers, *args, **kwargs):
         """Attach a new parser to the subparsers of the main module."""
+        super().__init__(*args, **kwargs)
+
         # register commands
         parser = subparsers.add_parser('search', help='Search command')
         parser.add_argument('--query', nargs='?', help='Run a search query')
@@ -27,36 +29,19 @@ class SplunkPlugin(Plugin):
         parser.add_argument('--get', nargs='?', help='Get the search')
         parser.set_defaults(func=self.savedsearch)
 
-        # get splunk params
-        self.endpoint = kwargs.get('endpoint')
-
-        # set authentication
-        self.auth(kwargs['auth'])
-
-    def auth(self, auth_config):
-        """Manage authentication."""
-        if auth_config['type'] == 'okta':
-            self.okta = OktaSamlClient(
-                    username = auth_config['login'],
-                    password = getpass(f'Password for {auth_config["login"]}: '),
-                    endpoint = auth_config['endpoint'],
-                    app_name = auth_config['app_name'],
-                    app_id = auth_config['app_id'],
-            )
-        if auth_config['type'] == 'apikey':
-            self.session = requests.Session()
-            self.session.headers = {"Authorization": f"Bearer {auth_config['token']}"}
-
     def check(self):
-        r = self.session.get(f'{self.endpoint}:8089/services/apps/local')
-        r.raise_for_status()
-        return True
+        try:
+            r = self.get('/services/apps/local')
+            r.raise_for_status()
+            return True
+        except requests.exceptions.HTTPError as e:
+            return False
 
     def search(self, query, *args, max_count=100, **kwargs):
         """Run search queries."""
         try:
             payload = {'search': query, 'output_mode': 'json', 'max_count': max_count}
-            r = self.session.post(f'{self.endpoint}:8089/services/search/jobs/export', data=payload)
+            r = self.post('/services/search/jobs/export', data=payload)
             r.raise_for_status()
             print(r.text)
 
@@ -75,7 +60,7 @@ class SplunkPlugin(Plugin):
                 payload['search'].append(f'eai:acl.owner={user}')
             if name:
                 payload['search'].append(f'name="*{name}*"')
-            r = self.session.get(f'{self.endpoint}:8089/services/saved/searches', params=payload)
+            r = self.get('/services/saved/searches', params=payload)
             r.raise_for_status()
             results = r.json()['entry']
             total = r.json()['paging']['total']
@@ -105,7 +90,7 @@ class SplunkPlugin(Plugin):
         try:
             payload = {'output_mode': 'json'}
             name = requests.utils.quote(get)
-            r = self.session.get(f'{self.endpoint}:8089/services/saved/searches/{name}', params=payload)
+            r = self.get(f'/services/saved/searches/{name}', params=payload)
             r.raise_for_status()
             # directly output the json to be parsed by an external tool
             print(r.text)

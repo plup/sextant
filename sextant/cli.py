@@ -18,64 +18,71 @@ from thehive4py.exceptions import TheHiveException
 
 def load():
 
-    version = metadata.version(__name__.split('.')[0])
-    config = confuse.Configuration('sextant')
-
-    # main parser
-    parser = ArgumentParser(description='Find your way through celestial events.', add_help=False)
-    parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
-    parser.add_argument('-c', '--context', type=str, help='Active context')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Logging level')
-    parser.add_argument('--status', action='store_true', help='Check submodules connectivity')
-
-    # parse global arguments
-    args,_ = parser.parse_known_args()
-
-    # select context
-    if args.context:
-        conf = config['contexts'][args.context].get()
-    else:
-        conf = next(iter(config['contexts'].values())).get()
-
-    # restore help and set submodules for plugin argument parsing
-    parser.add_argument('-h', '--help', action='help')
-    subparsers = parser.add_subparsers(dest='modules', help='Modules')
-
-    # register plugins
-    plugins = []
     try:
-        from .splunk import SplunkPlugin
-        # add a subparser for the plugin
-        plugin_parser = subparsers.add_parser(SplunkPlugin.name, help='Splunk')
-        plugin_subparsers = plugin_parser.add_subparsers(help='Splunk module help')
-        plugins.append(SplunkPlugin(plugin_subparsers, **conf['splunk']))
+        version = metadata.version(__name__.split('.')[0])
+        config = confuse.Configuration('sextant')
 
-        from .thehive import ThehivePlugin
-        plugin_parser = subparsers.add_parser(ThehivePlugin.name, help='TheHive')
-        plugin_subparsers = plugin_parser.add_subparsers(title=ThehivePlugin.name)
-        plugins.append(ThehivePlugin(plugin_subparsers, **conf['thehive']))
+        # main parser
+        parser = ArgumentParser(description='Find your way through celestial events.', add_help=False)
+        parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
+        parser.add_argument('-c', '--context', type=str, help='Active context')
+        parser.add_argument('-v', '--verbose', action='store_true', help='Logging level')
+        parser.add_argument('--status', action='store_true', help='Check submodules connectivity')
 
-    except KeyError as e:
-        print(f'Error when registering Splunk: {e} not found')
+        # parse global arguments
+        args,_ = parser.parse_known_args()
 
-    # parsing arguments and running code
-    args = parser.parse_args()
+        # select context
+        if args.context:
+            conf = config['contexts'][args.context].get()
+        else:
+            conf = next(iter(config['contexts'].values())).get()
 
-    if args.status:
-        return status(plugins)
+        # restore help and set submodules for plugin argument parsing
+        parser.add_argument('-h', '--help', action='help')
+        subparsers = parser.add_subparsers(dest='modules', help='Modules')
 
-    if args.modules:
+        # register plugins
+        plugins = []
         try:
-            kwargs = args.__dict__
-            func = kwargs.pop('func')
-            func(**kwargs)
+            from .splunk import SplunkPlugin
+            # add a subparser for the plugin
+            plugin_parser = subparsers.add_parser(SplunkPlugin.name, help='Splunk')
+            plugin_subparsers = plugin_parser.add_subparsers(help='Splunk module help')
+            plugins.append(SplunkPlugin(plugin_subparsers, **conf['splunk']))
+
+            from .thehive import ThehivePlugin
+            plugin_parser = subparsers.add_parser(ThehivePlugin.name, help='TheHive')
+            plugin_subparsers = plugin_parser.add_subparsers(title=ThehivePlugin.name)
+            plugins.append(ThehivePlugin(plugin_subparsers, **conf['thehive']))
+
         except KeyError as e:
-            parser.print_help()
+            raise RuntimeError(f'Error when registering: {e} not found')
+
+        # parsing arguments and running code
+        args = parser.parse_args()
+
+        if args.status:
+            return status(plugins)
+
+        if args.modules:
+            try:
+                kwargs = args.__dict__
+                func = kwargs.pop('func')
+                func(**kwargs)
+            except KeyError as e:
+                parser.print_help()
+
+    except RuntimeError as e:
+        print(e)
 
 def status(plugins):
     """Check states of all registered components."""
     for plugin in plugins:
-        print(plugin.name, plugin.check())
+        try:
+            print(plugin.name, plugin.check())
+        except requests.exceptions.HTTPError as e:
+            print(plugin.name, e)
 
 # alert commands
 @click.group()
