@@ -1,9 +1,10 @@
 """Contains the CLI commands."""
-from argparse import ArgumentParser
 import click
 import confuse
 import sys
 import uuid
+import logging
+from argparse import ArgumentParser
 from functools import update_wrapper
 from importlib import metadata
 from pathlib import Path
@@ -26,11 +27,25 @@ def load():
         parser = ArgumentParser(description='Find your way through celestial events.', add_help=False)
         parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
         parser.add_argument('-c', '--context', type=str, help='Active context')
-        parser.add_argument('-v', '--verbose', action='store_true', help='Logging level')
+        parser.add_argument('-v', '--verbose', action='count', default=0, help='Logging level')
         parser.add_argument('--status', action='store_true', help='Check submodules connectivity')
 
         # parse global arguments
         args,_ = parser.parse_known_args()
+
+        # handle verbosity
+        try:
+            logging.basicConfig()
+            if args.verbose == 0:
+                logging.getLogger().setLevel(logging.CRITICAL)
+            if args.verbose == 1:
+                logging.getLogger().setLevel(logging.WARNING)
+            if args.verbose == 2:
+                logging.getLogger().setLevel(logging.INFO)
+            if args.verbose >= 3:
+                logging.getLogger().setLevel(logging.DEBUG)
+        except:
+            logging.getLogger(__name__).critical('Logging not setup properly')
 
         # select context
         if args.context:
@@ -79,10 +94,7 @@ def load():
 def status(plugins):
     """Check states of all registered components."""
     for plugin in plugins:
-        try:
-            print(plugin.name, plugin.check())
-        except requests.exceptions.HTTPError as e:
-            print(plugin.name, e)
+        print(plugin.name, plugin.check())
 
 # alert commands
 @click.group()
