@@ -37,7 +37,7 @@ def load():
         try:
             logging.basicConfig()
             if args.verbose == 0:
-                logging.getLogger().setLevel(logging.CRITICAL)
+                logging.getLogger().setLevel(logging.ERROR)
             if args.verbose == 1:
                 logging.getLogger().setLevel(logging.WARNING)
             if args.verbose == 2:
@@ -89,7 +89,6 @@ def load():
             print(f'No config for {e}')
         except Exception as e:
             print(f'Error when registering: {e}')
-            raise
 
         # parsing arguments and running code
         args = parser.parse_args()

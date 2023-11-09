@@ -2,7 +2,7 @@ import logging
 import requests
 from rich.console import Console
 from rich.table import Table
-from sextant.plugin import BasePlugin
+from sextant.plugin import BasePlugin, with_auth
 from .auth.okta import OktaClient, OktaSamlClient
 
 
@@ -29,9 +29,7 @@ class SplunkPlugin(BasePlugin):
         parser.add_argument('--get', nargs='?', help='Get the search')
         parser.set_defaults(func=self.savedsearch)
 
-        # authenticate
-        self.auth()
-
+    @with_auth
     def check(self):
         try:
             r = self.get('/services/apps/local')
@@ -40,6 +38,7 @@ class SplunkPlugin(BasePlugin):
         except requests.exceptions.HTTPError as e:
             return False
 
+    @with_auth
     def search(self, query, *args, max_count=100, **kwargs):
         """Run search queries."""
         try:
@@ -51,6 +50,7 @@ class SplunkPlugin(BasePlugin):
         except requests.exceptions.HTTPError as e:
             print(f"Error: {r.json()['messages'][0]['text']}")
 
+    @with_auth
     def savedsearches(self, *args, name=None, user=None, action=None, count=0, **kwargs):
         """
         Find saved searches.
@@ -88,6 +88,7 @@ class SplunkPlugin(BasePlugin):
         console.print(table)
         console.print(f'total: {total}')
 
+    @with_auth
     def savedsearch(self, get, *args, **kwargs):
         """Configuration or actions on a savedsearch."""
         try:
