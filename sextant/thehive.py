@@ -124,6 +124,9 @@ class ThehivePlugin(BasePlugin):
 
     def __init__(self, subparsers, *args, **kwargs):
         """Attach a new parser to the subparsers of the main module."""
+        super().__init__(*args, **kwargs)
+        self.verify = False
+
         # register query commands
         query_parser = subparsers.add_parser('query', help='Query command')
         query_parser.add_argument('query', type=str, help='Query as JSON string')
@@ -178,22 +181,12 @@ class ThehivePlugin(BasePlugin):
         del_parser.add_argument('id', type=str, help='Dashboard ~id')
         del_parser.set_defaults(func=self.delete_dashboard)
 
-        # set authentication
-        if kwargs['auth']['type'] == 'apikey':
-            self.client = TheHiveClient(
-                    kwargs['endpoint'],
-                    kwargs['auth']['token'],
-                    version = 5,
-                    cert = False
-                )
-        else:
-            raise NotImplementedError('Unsupported authentication protocol')
-
-    def check(self, verbose=False):
+    def check(self):
         try:
-            self.client.health().text
+            r = self.get('/api/v1/status/public')
+            r.raise_for_status()
             return True
-        except TheHiveException as e:
+        except HTTPError as e:
             return False
 
     def query(self, *args, **kwargs):
