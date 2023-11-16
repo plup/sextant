@@ -62,10 +62,20 @@ class SplunkPlugin(BasePlugin):
             print(f"Error: {r.json()['messages'][0]['text']}")
 
     @with_auth
-    def savedsearches(self, *args, name=None, user=None, action=None, count=0, **kwargs):
+    def jobs(self, *args, **kwargs):
+        """Command: List the running jobs"""
+        r = self.get('/services/search/jobs', params={'output_mode': 'json'})
+        r.raise_for_status()
+        print(r.text)
+
+    @with_auth
+    def alerts(self, *args, name=None, user=None, action=None, count=0, **kwargs):
         """
-        Find saved searches.
-        Support filtering on username.
+        Command: Find saved searches
+
+        :param --name: string contained in the search name
+        :param --user: owner of the search
+        :param --action: actions triggered
         """
         try:
             payload = {'output_mode': 'json', 'count': count, 'search': []}
@@ -100,11 +110,16 @@ class SplunkPlugin(BasePlugin):
         console.print(f'total: {total}')
 
     @with_auth
-    def savedsearch(self, get, *args, **kwargs):
-        """Configuration or actions on a savedsearch."""
+    def alert(self, name, *args, **kwargs):
+        """
+        Command: get details on a saved search.
+
+        :param --name: unique ID for the search
+        """
         try:
+            print(name)
             payload = {'output_mode': 'json'}
-            name = requests.utils.quote(get)
+            name = requests.utils.quote(name)
             r = self.get(f'/services/saved/searches/{name}', params=payload)
             r.raise_for_status()
             # directly output the json to be parsed by an external tool

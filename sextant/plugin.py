@@ -45,9 +45,9 @@ class BasePlugin(Session):
                 parser = subparsers.add_parser(name, help=title)
                 for param in docstring.params:
                     if param.type_name == 'remain':
-                        parser.add_argument(param.arg_name, nargs=argparse.REMAINDER, help='query to run')
+                        parser.add_argument(param.arg_name, nargs=argparse.REMAINDER, help=param.description)
                     else:
-                        parser.add_argument(param.arg_name, help='query to run')
+                        parser.add_argument(param.arg_name, help=param.description)
                 parser.set_defaults(func=obj)
 
        # parser = subparsers.add_parser('query', help='Search command')
