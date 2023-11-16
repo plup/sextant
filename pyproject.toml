@@ -8,12 +8,10 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "click",
     "rich",
     "fido2",
     "requests",
     "confuse",
-    "thehive4py",
     "beautifulsoup4"
 ]
 

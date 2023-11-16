@@ -1,5 +1,6 @@
 import logging
 import requests
+import argparse
 from rich.console import Console
 from rich.table import Table
 from sextant.plugin import BasePlugin, with_auth
