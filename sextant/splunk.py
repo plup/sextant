@@ -15,9 +15,9 @@ class SplunkPlugin(BasePlugin):
         super().__init__(*args, **kwargs)
 
         # register commands
-        parser = subparsers.add_parser('search', help='Search command')
-        parser.add_argument('--query', nargs='?', help='Run a search query')
-        parser.set_defaults(func=self.search)
+        parser = subparsers.add_parser('query', help='Search command')
+        parser.add_argument('query', nargs=argparse.REMAINDER, help='query to run (ex: "search index=notable earliest=-60m")')
+        parser.set_defaults(func=self.query)
 
         parser = subparsers.add_parser('savedsearches', help='Find savedsearches')
         parser.add_argument('--name', nargs='?', help='Filter on search name')
@@ -40,13 +40,18 @@ class SplunkPlugin(BasePlugin):
             return False
 
     @with_auth
-    def search(self, query, *args, max_count=100, **kwargs):
+    def query(self, query, *args, max_count=100, **kwargs):
         """Run search queries."""
         try:
-            payload = {'search': query, 'output_mode': 'json', 'max_count': max_count}
+            payload = {'search': query, 'output_mode': 'json_rows', 'max_count': max_count}
             r = self.post('/services/search/jobs/export', data=payload)
             r.raise_for_status()
-            print(r.text)
+            table = Table(*r.json()['fields'])
+            for row in r.json()['rows']:
+                table.add_row(*row)
+
+            console = Console()
+            console.print(table)
 
         except requests.exceptions.HTTPError as e:
             print(f"Error: {r.json()['messages'][0]['text']}")
