@@ -1,8 +1,11 @@
 import subprocess
+import inspect
+import argparse
 from requests import Session
 from urllib.parse import urljoin
 from getpass import getpass
 from functools import wraps
+from docstring_parser import parse as docparse
 from .auth.okta import OktaClient, OktaSamlClient
 
 def with_auth(f):
@@ -18,6 +21,7 @@ def with_auth(f):
 class BasePlugin(Session):
     """The base class to inherit a plugin from."""
     def __init__(self, *args, **kwargs):
+        self.make_args(args[0])
         self.base_url = kwargs.pop('endpoint')
         self.auth_params = kwargs.pop('auth')
         self.auth_type = 'Bearer'
@@ -28,6 +32,27 @@ class BasePlugin(Session):
         """Adds the endpoint to all requests."""
         complete_url = urljoin(self.base_url, url)
         return super().request(method, complete_url, *args, **kwargs)
+
+    def make_args(self, subparsers):
+        """Use methods docstring to make CLI arguments."""
+        # search for Commands
+        for name, obj in inspect.getmembers(self, inspect.ismethod):
+            doc = inspect.getdoc(obj)
+            if doc and doc.lower().startswith('command:'):
+                # build the arg parser from docstring
+                docstring = docparse(inspect.getdoc(obj))
+                title = docstring.short_description[8:]
+                parser = subparsers.add_parser(name, help=title)
+                for param in docstring.params:
+                    if param.type_name == 'remain':
+                        parser.add_argument(param.arg_name, nargs=argparse.REMAINDER, help='query to run')
+                    else:
+                        parser.add_argument(param.arg_name, help='query to run')
+                parser.set_defaults(func=obj)
+
+       # parser = subparsers.add_parser('query', help='Search command')
+       # parser.add_argument('query', nargs=argparse.REMAINDER, help='query to run (ex: "search index=notable earliest=-60m")')
+       # parser.set_defaults(func=self.query)
 
     def check(self):
         raise NotImplementedError('Method not implemented')

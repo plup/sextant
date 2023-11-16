@@ -40,10 +40,15 @@ class SplunkPlugin(BasePlugin):
             return False
 
     @with_auth
-    def query(self, query, *args, max_count=100, **kwargs):
-        """Run search queries."""
+    def query(self, query, *args, count=100, **kwargs):
+        """
+        Command: Run search queries
+
+        :param int --count: limit of items to return
+        :param remain query: the query to run
+        """
         try:
-            payload = {'search': query, 'output_mode': 'json_rows', 'max_count': max_count}
+            payload = {'search': query, 'output_mode': 'json_rows', 'max_count': count}
             r = self.post('/services/search/jobs/export', data=payload)
             r.raise_for_status()
             table = Table(*r.json()['fields'])
