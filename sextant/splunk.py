@@ -4,31 +4,10 @@ import argparse
 from rich.console import Console
 from rich.table import Table
 from sextant.plugin import BasePlugin, with_auth
-from .auth.okta import OktaClient, OktaSamlClient
 
 
 class SplunkPlugin(BasePlugin):
     name = 'splunk'
-
-    def __init__(self, subparsers, *args, **kwargs):
-        """Attach a new parser to the subparsers of the main module."""
-        super().__init__(*args, **kwargs)
-
-        # register commands
-        parser = subparsers.add_parser('query', help='Search command')
-        parser.add_argument('query', nargs=argparse.REMAINDER, help='query to run (ex: "search index=notable earliest=-60m")')
-        parser.set_defaults(func=self.query)
-
-        parser = subparsers.add_parser('savedsearches', help='Find savedsearches')
-        parser.add_argument('--name', nargs='?', help='Filter on search name')
-        parser.add_argument('--user', nargs='?', help='Filter on username')
-        parser.add_argument('--action', nargs='?', help='Filter on action')
-        parser.add_argument('--count', type=int, default=0, help='Limit the results')
-        parser.set_defaults(func=self.savedsearches)
-
-        parser = subparsers.add_parser('savedsearch', help='Get a savedsearch')
-        parser.add_argument('--get', nargs='?', help='Get the search')
-        parser.set_defaults(func=self.savedsearch)
 
     @with_auth
     def check(self):
