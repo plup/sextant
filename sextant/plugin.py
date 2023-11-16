@@ -50,10 +50,6 @@ class BasePlugin(Session):
                         parser.add_argument(param.arg_name, help=param.description)
                 parser.set_defaults(func=obj)
 
-       # parser = subparsers.add_parser('query', help='Search command')
-       # parser.add_argument('query', nargs=argparse.REMAINDER, help='query to run (ex: "search index=notable earliest=-60m")')
-       # parser.set_defaults(func=self.query)
-
     def check(self):
         raise NotImplementedError('Method not implemented')
 
