@@ -1,6 +1,7 @@
 import logging
 import requests
 import argparse
+from functools import wraps
 from rich.console import Console
 from rich.table import Table
 from sextant.plugin import BasePlugin, with_auth
@@ -8,6 +9,16 @@ from sextant.plugin import BasePlugin, with_auth
 
 class SplunkPlugin(BasePlugin):
     name = 'splunk'
+
+    def with_errors(f):
+        """Handle errors and messages returned by Splunk."""
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            try:
+                return f(self, *args, **kwargs)
+            except requests.exceptions.HTTPError as e:
+                logging.error(e.response.json()['messages'][0]['text'])
+        return wrapper
 
     @with_auth
     def check(self):
@@ -19,6 +30,7 @@ class SplunkPlugin(BasePlugin):
             return False
 
     @with_auth
+    @with_errors
     def indexes(self, *args, **kwargs):
         """Command: List indexes"""
         r = self.get('/services/data/indexes', params={'output_mode': 'json', 'count':0, 'datatype':'all'})
