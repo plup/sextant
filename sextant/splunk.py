@@ -31,18 +31,36 @@ class SplunkPlugin(BasePlugin):
 
     @with_auth
     @with_errors
-    def indexes(self, *args, **kwargs):
-        """Command: List indexes"""
-        r = self.get('/services/data/indexes', params={'output_mode': 'json', 'count':0, 'datatype':'all'})
-        r.raise_for_status()
-        total = r.json()['paging']['total']
-        table = Table('name', 'datatype')
-        for item in r.json()['entry']:
-            table.add_row(item['name'], item['content']['datatype'])
+    def index(self, *args, name=None, **kwargs):
+        """
+        Command: Get informations about indexes
 
-        console = Console()
-        console.print(table)
-        console.print(f'total: {total}')
+        :param optional name: name of the index to fetch fields from
+        """
+        if not name:
+            r = self.get('/services/data/indexes', params={'output_mode': 'json', 'count':0, 'datatype':'all'})
+            r.raise_for_status()
+            total = r.json()['paging']['total']
+            table = Table('name', 'datatype')
+            for item in r.json()['entry']:
+                style = 'red' if item['content']['disabled'] else 'default'
+                table.add_row(item['name'], item['content']['datatype'], style=style)
+
+            console = Console()
+            console.print(table)
+            console.print(f'total: {total}')
+
+        else:
+            payload = {'search': f'walklex index={name} type=field | eval field=trim(field) | dedup field | fields field | sort field',
+                       'output_mode': 'json_rows'}
+            r = self.post('/services/search/jobs/export', data=payload)
+            r.raise_for_status()
+
+            table = Table('field')
+            for row in r.json()['rows']:
+                table.add_row(row[0].strip())
+            console = Console()
+            console.print(table)
 
     @with_auth
     def query(self, query, *args, count=100, **kwargs):
@@ -56,6 +74,10 @@ class SplunkPlugin(BasePlugin):
             payload = {'search': query, 'output_mode': 'json_rows', 'max_count': count}
             r = self.post('/services/search/jobs/export', data=payload)
             r.raise_for_status()
+            if not r.text:
+                print('No data')
+                return
+
             table = Table(*r.json()['fields'])
             for row in r.json()['rows']:
                 table.add_row(*row)
