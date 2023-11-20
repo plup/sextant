@@ -19,6 +19,20 @@ class SplunkPlugin(BasePlugin):
             return False
 
     @with_auth
+    def indexes(self, *args, **kwargs):
+        """Command: List indexes"""
+        r = self.get('/services/data/indexes', params={'output_mode': 'json', 'count':0, 'datatype':'all'})
+        r.raise_for_status()
+        total = r.json()['paging']['total']
+        table = Table('name', 'datatype')
+        for item in r.json()['entry']:
+            table.add_row(item['name'], item['content']['datatype'])
+
+        console = Console()
+        console.print(table)
+        console.print(f'total: {total}')
+
+    @with_auth
     def query(self, query, *args, count=100, **kwargs):
         """
         Command: Run search queries
