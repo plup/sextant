@@ -45,9 +45,16 @@ class BasePlugin(Session):
                 parser = subparsers.add_parser(name, help=title)
                 for param in docstring.params:
                     if param.type_name == 'remain':
-                        parser.add_argument(param.arg_name, nargs=argparse.REMAINDER, help=param.description)
+                        nargs = argparse.REMAINDER
+                    elif param.type_name == 'optional':
+                        nargs = argparse.OPTIONAL
+                    elif param.type_name == 'zero+':
+                        nargs = argparse.ZERO_OR_MORE
+                    elif param.type_name == 'one+':
+                        nargs = argparse.ONE_OR_MORE
                     else:
-                        parser.add_argument(param.arg_name, help=param.description)
+                        nargs = None
+                    parser.add_argument(param.arg_name, nargs=nargs, help=param.description)
                 parser.set_defaults(func=obj)
 
     def check(self):
