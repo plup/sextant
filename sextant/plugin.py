@@ -44,17 +44,18 @@ class BasePlugin(Session):
                 title = docstring.short_description[8:]
                 parser = subparsers.add_parser(name, help=title)
                 for param in docstring.params:
+                    _type = {} # hold the nargs/action to give to argparse
                     if param.type_name == 'remain':
-                        nargs = argparse.REMAINDER
-                    elif param.type_name == 'optional':
-                        nargs = argparse.OPTIONAL
-                    elif param.type_name == 'zero+':
-                        nargs = argparse.ZERO_OR_MORE
-                    elif param.type_name == 'one+':
-                        nargs = argparse.ONE_OR_MORE
-                    else:
-                        nargs = None
-                    parser.add_argument(param.arg_name, nargs=nargs, help=param.description)
+                        _type['nargs'] = argparse.REMAINDER
+                    if param.type_name == 'optional':
+                        _type['nargs'] = argparse.OPTIONAL
+                    if param.type_name == 'zero+':
+                        _type['nargs'] = argparse.ZERO_OR_MORE
+                    if param.type_name == 'one+':
+                        _type['nargs'] = argparse.ONE_OR_MORE
+                    if param.type_name == 'flag':
+                        _type['action'] = 'store_true'
+                    parser.add_argument(param.arg_name, **_type, help=param.description)
                 parser.set_defaults(func=obj)
 
     def check(self):
