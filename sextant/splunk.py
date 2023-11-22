@@ -31,32 +31,49 @@ class SplunkPlugin(BasePlugin):
 
     @with_auth
     @with_errors
-    def index(self, *args, name=None, **kwargs):
-        """
-        Command: Get informations about indexes
+    def indexes(self, *args, **kwargs):
+        """Command: List indexes"""
+        r = self.get('/services/data/indexes', params={'output_mode': 'json', 'count':0, 'datatype':'all'})
+        r.raise_for_status()
+        total = r.json()['paging']['total']
+        table = Table('indexes', 'datatype', 'counts')
+        for item in r.json()['entry']:
+            style = 'red' if item['content']['disabled'] else 'default'
+            table.add_row(item['name'], item['content']['datatype'],
+                          str(item['content']['totalEventCount']),
+                          style=style)
 
-        :param optional name: name of the index to fetch fields from
+        console = Console()
+        console.print(table)
+        console.print(f'total: {total}')
+
+    @with_auth
+    @with_errors
+    def index(self, name, sourcetypes, **kwargs):
         """
-        if not name:
-            r = self.get('/services/data/indexes', params={'output_mode': 'json', 'count':0, 'datatype':'all'})
+        Command: Get informations about an index
+
+        :param name: name of the index
+        :param flag --sourcetypes: get the source types in documents
+        """
+        if sourcetypes:
+            payload = {'search': f'metadata index={name} type=sourcetypes',
+                       'output_mode': 'json_rows'}
+            r = self.post('/services/search/jobs/export', data=payload)
             r.raise_for_status()
-            total = r.json()['paging']['total']
-            table = Table('name', 'datatype')
-            for item in r.json()['entry']:
-                style = 'red' if item['content']['disabled'] else 'default'
-                table.add_row(item['name'], item['content']['datatype'], style=style)
-
+            table = Table('sourcetypes', 'counts')
+            for row in r.json()['rows']:
+                table.add_row(row[0].strip(), row[5].strip())
             console = Console()
             console.print(table)
-            console.print(f'total: {total}')
 
         else:
-            payload = {'search': f'walklex index={name} type=field | eval field=trim(field) | dedup field | fields field | sort field',
+            payload = {'search': f'walklex index={name} type=field | eval field=trim(field) | sort field | dedup field | fields field',
                        'output_mode': 'json_rows'}
             r = self.post('/services/search/jobs/export', data=payload)
             r.raise_for_status()
 
-            table = Table('field')
+            table = Table('fields')
             for row in r.json()['rows']:
                 table.add_row(row[0].strip())
             console = Console()
