@@ -1,9 +1,11 @@
 import logging
 import requests
 import argparse
+import json
 from functools import wraps
 from rich.console import Console
 from rich.table import Table
+from rich.live import Live
 from sextant.plugin import BasePlugin, with_auth
 
 
@@ -31,7 +33,7 @@ class SplunkPlugin(BasePlugin):
 
     @with_auth
     @with_errors
-    def indexes(self, *args, **kwargs):
+    def indexes(self, **kwargs):
         """Command: List indexes"""
         r = self.get('/services/data/indexes', params={'output_mode': 'json', 'count':0, 'datatype':'all'})
         r.raise_for_status()
@@ -49,23 +51,37 @@ class SplunkPlugin(BasePlugin):
 
     @with_auth
     @with_errors
-    def index(self, name, sourcetypes, **kwargs):
+    def index(self, **kwargs):
         """
         Command: Get informations about an index
 
         :param name: name of the index
-        :param flag --sourcetypes: get the source types in documents
+        :param optional --from: first event (default: 30d)
+        :param optional --to: last event (default: now)
+        :param flag --sourcetypes: get the source types seen in documents
         """
+        name = kwargs['name']
+        sourcetypes = kwargs['sourcetypes']
+        _from = kwargs['from'] or '30d'
+        to = kwargs['to'] or 'now'
+
         if sourcetypes:
             payload = {'search': f'metadata index={name} type=sourcetypes',
-                       'output_mode': 'json_rows'}
-            r = self.post('/services/search/jobs/export', data=payload)
+                       'earliest_time': f'-{_from}', 'latest_time': to,
+                       'output_mode': 'json', 'preview': False}
+            r = self.post('/services/search/jobs/export', data=payload, stream=True)
             r.raise_for_status()
+
             table = Table('sourcetypes', 'counts')
-            for row in r.json()['rows']:
-                table.add_row(row[0].strip(), row[5].strip())
-            console = Console()
-            console.print(table)
+            with Live(table, refresh_per_second=1):
+                for row in r.iter_lines():
+                    row = row.decode().strip()
+                    if row:
+                        try:
+                            result = json.loads(row).get('result')
+                            table.add_row(result['sourcetype'], result['totalCount'])
+                        except TypeError:
+                            print('No result')
 
         else:
             payload = {'search': f'walklex index={name} type=field | eval field=trim(field) | sort field | dedup field | fields field',
