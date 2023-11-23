@@ -56,44 +56,41 @@ class SplunkPlugin(BasePlugin):
         Command: Get informations about an index
 
         :param name: name of the index
-        :param optional --from: first event (default: 30d)
+        :param optional --from: first event (default: 1h)
         :param optional --to: last event (default: now)
-        :param flag --sourcetypes: get the source types seen in documents
+        :param optional --stype: filter on source type
+        :param flag --stypes: display the source types seen in documents
         """
         name = kwargs['name']
-        sourcetypes = kwargs['sourcetypes']
-        _from = kwargs['from'] or '30d'
+        _from = kwargs['from'] or '1h'
         to = kwargs['to'] or 'now'
+        sourcetype = kwargs['stype'] or '*'
+        sourcetypes = kwargs['stypes']
 
         if sourcetypes:
-            payload = {'search': f'metadata index={name} type=sourcetypes',
-                       'earliest_time': f'-{_from}', 'latest_time': to,
-                       'output_mode': 'json', 'preview': False}
-            r = self.post('/services/search/jobs/export', data=payload, stream=True)
-            r.raise_for_status()
-
-            table = Table('sourcetypes', 'counts')
-            with Live(table, refresh_per_second=1):
-                for row in r.iter_lines():
-                    row = row.decode().strip()
-                    if row:
-                        try:
-                            result = json.loads(row).get('result')
-                            table.add_row(result['sourcetype'], result['totalCount'])
-                        except TypeError:
-                            print('No result')
+            query = f'metadata index={name} type=sourcetypes'
+            fields = ['sourcetype', 'totalCount']
 
         else:
-            payload = {'search': f'walklex index={name} type=field | eval field=trim(field) | sort field | dedup field | fields field',
-                       'output_mode': 'json_rows'}
-            r = self.post('/services/search/jobs/export', data=payload)
-            r.raise_for_status()
+            query = f'search index={name} sourcetype={sourcetype} | fieldsummary | fields field',
+            fields = ['field']
 
-            table = Table('fields')
-            for row in r.json()['rows']:
-                table.add_row(row[0].strip())
-            console = Console()
-            console.print(table)
+        payload = {'search': query,
+                   'earliest_time': f'-{_from}', 'latest_time': to,
+                   'output_mode': 'json', 'preview': False}
+        r = self.post('/services/search/jobs/export', data=payload, stream=True)
+        r.raise_for_status()
+
+        table = Table(*fields)
+        with Live(table, refresh_per_second=1):
+            for row in r.iter_lines():
+                row = row.decode().strip()
+                if row:
+                    try:
+                        result = json.loads(row).get('result')
+                        table.add_row(*[result[f] for f in fields])
+                    except TypeError:
+                        print('No result')
 
     @with_auth
     def query(self, query, *args, count=100, **kwargs):
