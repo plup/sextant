@@ -93,30 +93,46 @@ class SplunkPlugin(BasePlugin):
                         print('No result')
 
     @with_auth
-    def query(self, query, *args, count=100, **kwargs):
+    @with_errors
+    def query(self, **kwargs):
         """
         Command: Run search queries
 
-        :param int --count: limit of items to return
-        :param remain query: the query to run
+        :param optional --from: first event (default: 1h)
+        :param optional --to: last event (default: now)
+        :param query: the query to run
         """
+        # fetch params
+        _from = kwargs['from'] or '1h'
+        to = kwargs['to'] or 'now'
+        query = kwargs['query']
+
+        # ru nthe query
+        # count and max_time seems to be ignored when streaming
+        payload = {'search': query,
+                   'earliest_time': f'-{_from}', 'latest_time': to,
+                   'output_mode': 'json', 'preview': False, 'summarize': True}
+        r = self.post('/services/search/jobs/export', data=payload, stream=True)
+        r.raise_for_status()
+
+        # guess returned fields from first result by returning the first 5 not internal
         try:
-            payload = {'search': query, 'output_mode': 'json_rows', 'max_count': count}
-            r = self.post('/services/search/jobs/export', data=payload)
-            r.raise_for_status()
-            if not r.text:
-                print('No data')
-                return
+            it = r.iter_lines()
+            row = json.loads(next(it).decode().strip()).get('result')
+            fields = [f for f in row.keys() if not f.startswith('_')][:5]
+        except AttributeError:
+            print('No result')
+            return
 
-            table = Table(*r.json()['fields'])
-            for row in r.json()['rows']:
-                table.add_row(*row)
-
-            console = Console()
-            console.print(table)
-
-        except requests.exceptions.HTTPError as e:
-            print(f"Error: {r.json()['messages'][0]['text']}")
+        # build the result table
+        table = Table(*fields)
+        with Live(table, refresh_per_second=1):
+            for row in r.iter_lines():  # iterator starts from first element
+                row = row.decode().strip()
+                if not row:
+                    break
+                result = json.loads(row).get('result')
+                table.add_row(*[result[f] for f in fields])
 
     @with_auth
     def jobs(self, *args, **kwargs):
