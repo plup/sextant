@@ -1,18 +1,32 @@
 """Operations with The Hive."""
+import logging
 import requests
 import json
+import uuid
 from rich import print
 from rich.table import Table
 from functools import wraps, update_wrapper
 from urllib3.exceptions import InsecureRequestWarning
 from sextant.plugin import BasePlugin, with_auth
 
-
+logger = logging.getLogger(__name__)
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
 class ThehivePlugin(BasePlugin):
     name = 'thehive'
+
+    def with_errors(f):
+        """Handle errors and messages returned by Splunk."""
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            try:
+                return f(self, *args, **kwargs)
+            except requests.exceptions.HTTPError as e:
+                logger.error(e.response.json()['message'])
+            except requests.exceptions.ConnectTimeout:
+                logger.error('Connection timed out')
+        return wrapper
 
     def __init__(self, *args, **kwargs):
         """Attach a new parser to the subparsers of the main module."""
@@ -28,12 +42,13 @@ class ThehivePlugin(BasePlugin):
             return False
 
     @with_auth
+    @with_errors
     def alert(self, **kwargs):
         """Command: Create a fake alert"""
         payload = {
-              "type": "alertType",
+              "type": "alert",
               "source": "sextant",
-              "sourceRef": "1",
+              "sourceRef": str(uuid.uuid1()),
               "title": "Test alert",
               "description": "This is a test alert from the sextant",
               "severity": 1,
