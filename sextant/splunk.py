@@ -20,6 +20,8 @@ class SplunkPlugin(BasePlugin):
                 return f(self, *args, **kwargs)
             except requests.exceptions.HTTPError as e:
                 logging.error(e.response.json()['messages'][0]['text'])
+            except requests.exceptions.ConnectTimeout:
+                logging.error('Connection timed out')
         return wrapper
 
     @with_auth
@@ -28,7 +30,7 @@ class SplunkPlugin(BasePlugin):
             r = self.get('/services/apps/local')
             r.raise_for_status()
             return True
-        except requests.exceptions.HTTPError as e:
+        except Exception:
             return False
 
     @with_auth
