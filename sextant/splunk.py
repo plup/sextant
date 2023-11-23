@@ -118,8 +118,8 @@ class SplunkPlugin(BasePlugin):
         # guess returned fields from first result by returning the first 5 not internal
         try:
             it = r.iter_lines()
-            row = json.loads(next(it).decode().strip()).get('result')
-            fields = [f for f in row.keys() if not f.startswith('_')][:5]
+            first_result = json.loads(next(it).decode().strip()).get('result')
+            fields = [f for f in first_result.keys() if not f.startswith('_')][:5]
         except AttributeError:
             print('No result')
             return
@@ -127,7 +127,8 @@ class SplunkPlugin(BasePlugin):
         # build the result table
         table = Table(*fields)
         with Live(table, refresh_per_second=1):
-            for row in r.iter_lines():  # iterator starts from first element
+            table.add_row(*[first_result[f] for f in fields]) # display first result
+            for row in it:
                 row = row.decode().strip()
                 if not row:
                     break
