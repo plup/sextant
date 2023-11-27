@@ -55,23 +55,37 @@ class SplunkPlugin(BasePlugin):
     @with_errors
     def index(self, **kwargs):
         """
-        Command: Get informations about an index
+        Command: Display fields in the index
+
+        This command calls the Splunk "metadata" command.
 
         :param name: name of the index
         :param optional --from: first event (default: 1h)
         :param optional --to: last event (default: now)
-        :param optional --stype: filter on source type
-        :param flag --stypes: display the source types seen in documents
+        :param optional --stype: filter on a source type
+        :param flag --stypes: display all the source types instead
+        :param flag --sources: display all the sources instead
+        :param flag --hosts: display all hosts instead
         """
         name = kwargs['name']
         _from = kwargs['from'] or '1h'
         to = kwargs['to'] or 'now'
         sourcetype = kwargs['stype'] or '*'
         sourcetypes = kwargs['stypes']
+        sources = kwargs['sources']
+        hosts = kwargs['hosts']
 
         if sourcetypes:
             query = f'metadata index={name} type=sourcetypes'
             fields = ['sourcetype', 'totalCount']
+
+        elif sources:
+            query = f'metadata index={name} type=sources'
+            fields = ['source', 'totalCount']
+
+        elif hosts:
+            query = f'metadata index={name} type=hosts'
+            fields = ['host', 'totalCount']
 
         else:
             query = f'search index={name} sourcetype={sourcetype} | fieldsummary | fields field',
