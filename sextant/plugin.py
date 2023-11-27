@@ -42,7 +42,8 @@ class BasePlugin(Session):
                 # build the arg parser from docstring
                 docstring = docparse(inspect.getdoc(obj))
                 title = docstring.short_description[8:]
-                parser = subparsers.add_parser(name, help=title)
+                description = docstring.long_description
+                parser = subparsers.add_parser(name, help=title, description=description)
                 for param in docstring.params:
                     _type = {} # hold the nargs/action to give to argparse
                     if param.type_name == 'remain':
