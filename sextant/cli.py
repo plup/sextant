@@ -69,10 +69,10 @@ def load():
             print(f'Error when registering: {e}')
 
         try:
-            from sextant.sentinelone import Plugin
-            plugin_parser = subparsers.add_parser(Plugin.name, help='SentinelOne')
-            plugin_subparsers = plugin_parser.add_subparsers(title=Plugin.name)
-            plugins.append(Plugin(plugin_subparsers, **conf['sentinelone']))
+            from sextant.sentinelone import S1Plugin
+            plugin_parser = subparsers.add_parser(S1Plugin.name, help='SentinelOne')
+            plugin_subparsers = plugin_parser.add_subparsers(title=S1Plugin.name)
+            plugins.append(S1Plugin(plugin_subparsers, **conf['sentinelone']))
         except KeyError as e:
             print(f'No config for {e}')
         except Exception as e:
