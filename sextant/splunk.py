@@ -200,19 +200,24 @@ class SplunkPlugin(BasePlugin):
         console.print(f'total: {total}')
 
     @with_auth
-    def alert(self, name, *args, **kwargs):
+    def alert(self, **kwargs):
         """
-        Command: get details on a saved search.
+        Command: Get details on a saved search.
 
-        :param --name: unique ID for the search
+        :param name: unique ID for the search
+        :param flag --search: return the search query
         """
         try:
-            print(name)
+            name = kwargs['name']
+            search = kwargs.get('search')
             payload = {'output_mode': 'json'}
             name = requests.utils.quote(name)
             r = self.get(f'/services/saved/searches/{name}', params=payload)
             r.raise_for_status()
-            # directly output the json to be parsed by an external tool
-            print(r.text)
+            results = r.json()['entry'][0]
+            if search:
+                results = results['content']['search']
+            console = Console()
+            console.print(results)
         except requests.exceptions.HTTPError as e:
             print(e)
