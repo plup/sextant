@@ -44,7 +44,11 @@ class ThehivePlugin(BasePlugin):
     @with_auth
     @with_errors
     def alert(self, **kwargs):
-        """Command: Create a fake alert"""
+        """Command: Create a fake alert
+
+        :param optional --from: load alert params from file
+        """
+        # define a fake alert
         payload = {
               "type": "alert",
               "source": "sextant",
@@ -62,6 +66,14 @@ class ThehivePlugin(BasePlugin):
                  { "dataType": "hostname", "data": "localhost" },
               ],
             }
+        # override fields from file
+        try:
+            _from = kwargs['from']
+            with open(_from, 'r') as file:
+                payload.update(json.load(file))
+        except (KeyError, TypeError):
+            pass
+
         r = self.post('/api/v1/alert', json=payload)
         r.raise_for_status()
         print(r.json())
