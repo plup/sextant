@@ -65,7 +65,11 @@ class BasePlugin(Session):
     def get_token(self):
         """Fetch a token from the provider and set the session auth."""
         params = self.auth_params
-        if params['type'] == 'okta':
+
+        if params['type'] == 'apikey':
+            return params['key']
+
+        elif params['type'] == 'okta':
             okta = OktaSamlClient(
                 endpoint = params['endpoint'],
                 app_name = params['app_name'],

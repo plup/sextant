@@ -4,6 +4,7 @@ import requests
 import json
 import uuid
 from rich import print
+from rich.console import Console
 from rich.table import Table
 from functools import wraps, update_wrapper
 from urllib3.exceptions import InsecureRequestWarning
@@ -43,8 +44,22 @@ class ThehivePlugin(BasePlugin):
 
     @with_auth
     @with_errors
+    def types(self, **kwargs):
+        """Command: Get observable types"""
+        r = self.post('/api/v1/query', json={"query": [{"_name": "listObservableType"}]})
+        r.raise_for_status()
+        table = Table('name')
+        for item in r.json():
+            table.add_row(item['name'])
+
+        console = Console()
+        console.print(table)
+
+    @with_auth
+    @with_errors
     def alert(self, **kwargs):
-        """Command: Create a fake alert
+        """
+        Command: Create a fake alert
 
         :param optional --from: load alert params from file
         """
