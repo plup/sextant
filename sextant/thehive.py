@@ -92,3 +92,23 @@ class ThehivePlugin(BasePlugin):
         r = self.post('/api/v1/alert', json=payload)
         r.raise_for_status()
         print(r.json())
+
+    @with_auth
+    @with_errors
+    def observable(self, **kwargs):
+        """
+        Command: Add an observable to a case
+
+        :param --case: case id
+        :param --type: observable type
+        :param --data: observable data
+        :param optional --tag: a tag
+        """
+        obs = {'dataType': kwargs['type'], 'data': kwargs['data']}
+        tag = kwargs.get('tag')
+        obs['tags'] = [tag] if tag else []
+
+        r = self.post(f"/api/v1/case/{kwargs['case']}/observable", json=obs)
+        r.raise_for_status()
+        return r.json()
+

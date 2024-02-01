@@ -12,7 +12,8 @@ dependencies = [
     "fido2",
     "requests",
     "confuse",
-    "beautifulsoup4"
+    "beautifulsoup4",
+    "docstring_parser"
 ]
 
 [project.scripts]
