@@ -7,7 +7,7 @@ from sextant.plugin import BasePlugin, with_auth
 logger = logging.getLogger(__name__)
 
 
-class S1Plugin(BasePlugin):
+class Plugin(BasePlugin):
     name = 's1'
 
     def __init__(self, *args, **kwargs):

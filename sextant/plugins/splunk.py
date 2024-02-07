@@ -9,8 +9,7 @@ from rich.live import Live
 from sextant.plugin import BasePlugin, with_auth
 
 
-class SplunkPlugin(BasePlugin):
-    name = 'splunk'
+class Plugin(BasePlugin):
 
     def with_errors(f):
         """Handle errors and messages returned by Splunk."""

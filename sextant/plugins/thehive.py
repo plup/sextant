@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
-class ThehivePlugin(BasePlugin):
-    name = 'thehive'
+class Plugin(BasePlugin):
 
     def with_errors(f):
         """Handle errors and messages returned by Splunk."""

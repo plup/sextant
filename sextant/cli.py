@@ -2,8 +2,35 @@
 import confuse
 import sys
 import logging
-from argparse import ArgumentParser
+import importlib
 from importlib import metadata
+from argparse import ArgumentParser
+
+logging.basicConfig()
+logger = logging.getLogger('sextant')
+
+def register_plugins(subparsers, config):
+    """Import all plugins available in the plugins module."""
+    plugins = {}
+    for plugin_name in config.keys():
+        try:
+            # make the import
+            module = importlib.import_module(f'sextant.plugins.{plugin_name}')
+            instance = getattr(module, 'Plugin')
+            # add a subparser for the plugin
+            plugin_parser = subparsers.add_parser(plugin_name, help=plugin_name)
+            plugin_subparsers = plugin_parser.add_subparsers(help=f'{plugin_name} module help')
+            # initiate the plugin
+            plugin = instance(plugin_subparsers, **config[plugin_name])
+            plugins[plugin_name] = plugin
+
+        except ModuleNotFoundError:
+            logger.info(f'Plugin {plugin_name} not found. Configuration ignored.')
+
+        except AttributeError as e:
+            logger.info(f'{e}. Configuration ignored.')
+
+    return plugins
 
 def load():
 
@@ -12,71 +39,37 @@ def load():
         config = confuse.Configuration('sextant')
 
         # main parser
-        parser = ArgumentParser(description='Find your way through celestial events.', add_help=False)
-        parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
+        parser = ArgumentParser(description='Navigate through events.', add_help=False)
         parser.add_argument('-c', '--context', type=str, help='Active context')
         parser.add_argument('-v', '--verbose', action='count', default=0, help='Logging level')
+        parser.add_argument('--version', action='version', version=f'%(prog)s v{version}')
         parser.add_argument('--status', action='store_true', help='Check submodules connectivity')
 
         # parse global arguments
         args,_ = parser.parse_known_args()
 
         # handle verbosity
-        try:
-            logging.basicConfig()
-            if args.verbose == 0:
-                logging.getLogger().setLevel(logging.ERROR)
-            if args.verbose == 1:
-                logging.getLogger().setLevel(logging.WARNING)
-            if args.verbose == 2:
-                logging.getLogger().setLevel(logging.INFO)
-            if args.verbose >= 3:
-                logging.getLogger().setLevel(logging.DEBUG)
-        except:
-            logging.getLogger(__name__).critical('Logging not setup properly')
+        if args.verbose == 0:
+            logger.setLevel(logging.ERROR)
+        if args.verbose == 1:
+            logger.setLevel(logging.WARNING)
+        if args.verbose == 2:
+            logger.setLevel(logging.INFO)
+        if args.verbose >= 3:
+            logger.setLevel(logging.DEBUG)
 
         # select context
         if args.context:
-            conf = config['contexts'][args.context].get()
+            plugin_conf = config['contexts'][args.context].get()
         else:
-            conf = next(iter(config['contexts'].values())).get()
+            plugin_conf = next(iter(config['contexts'].values())).get()
 
         # restore help and set submodules for plugin argument parsing
         parser.add_argument('-h', '--help', action='help')
         subparsers = parser.add_subparsers(dest='modules', help='Modules')
 
-        # register plugins
-        plugins = []
-        try:
-            from sextant.splunk import SplunkPlugin
-            # add a subparser for the plugin
-            plugin_parser = subparsers.add_parser(SplunkPlugin.name, help='Splunk')
-            plugin_subparsers = plugin_parser.add_subparsers(help='Splunk module help')
-            plugins.append(SplunkPlugin(plugin_subparsers, **conf['splunk']))
-        except KeyError as e:
-            print(f'No config for {e}')
-        except Exception as e:
-            print(f'Error when registering: {e}')
-
-        try:
-            from sextant.thehive import ThehivePlugin
-            plugin_parser = subparsers.add_parser(ThehivePlugin.name, help='TheHive')
-            plugin_subparsers = plugin_parser.add_subparsers(title=ThehivePlugin.name)
-            plugins.append(ThehivePlugin(plugin_subparsers, **conf['thehive']))
-        except KeyError as e:
-            print(f'No config for {e}')
-        except Exception as e:
-            print(f'Error when registering: {e}')
-
-        try:
-            from sextant.sentinelone import S1Plugin
-            plugin_parser = subparsers.add_parser(S1Plugin.name, help='SentinelOne')
-            plugin_subparsers = plugin_parser.add_subparsers(title=S1Plugin.name)
-            plugins.append(S1Plugin(plugin_subparsers, **conf['sentinelone']))
-        except KeyError as e:
-            print(f'No config for {e}')
-        except Exception as e:
-            print(f'Error when registering: {e}')
+        # register plugins passing the subparser and the context config
+        plugins = register_plugins(subparsers, plugin_conf)
 
         # parsing arguments and running code
         args = parser.parse_args()
@@ -97,5 +90,5 @@ def load():
 
 def status(plugins):
     """Check states of all registered components."""
-    for plugin in plugins:
-        print(plugin.name, plugin.check())
+    for name, plugin in plugins.items():
+        print(name, plugin.check())
