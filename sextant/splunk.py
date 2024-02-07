@@ -114,6 +114,9 @@ class SplunkPlugin(BasePlugin):
         """
         Command: Run search queries
 
+        Displays by default the first 5 fields found in the results. Use the `|fields` command to
+        return specific fields.
+
         :param optional --from: first event (default: 1h)
         :param optional --to: last event (default: now)
         :param query: the query to run
