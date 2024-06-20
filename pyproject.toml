@@ -1,6 +1,6 @@
 [project]
 name = "sextant"
-version = "0.2.1"
+version = "0.2.2"
 description = "Wrapper for observations in datalakes"
 authors = [
     { name = "Plup", email = "plup@plup.io"}
@@ -19,3 +19,7 @@ dependencies = [
 [project.scripts]
 sextant = "sextant.cli:load"
 
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]

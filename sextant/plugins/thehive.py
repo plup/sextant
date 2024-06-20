@@ -69,10 +69,6 @@ class Plugin(BasePlugin):
               "sourceRef": str(uuid.uuid1()),
               "title": "Test alert",
               "description": "This is a test alert from the sextant",
-              "severity": 1,
-              "tlp": 0,
-              "pap": 0,
-              "flag": True,
               "summary": "Nothing really bad happened",
               "observables": [
                  { "dataType": "url", "data": "http://example.org" },

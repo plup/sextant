@@ -206,20 +206,53 @@ class Plugin(BasePlugin):
         """
         Command: Get details on a saved search.
 
+        Return by default the search query.
+
         :param name: unique ID for the search
-        :param flag --search: return the search query
+        :param flag --trigger: trigger the alert
+        :param flag --history: get the related jobs history
         """
         try:
             name = kwargs['name']
             search = kwargs.get('search')
-            payload = {'output_mode': 'json'}
+            trigger = kwargs.get('trigger')
+            history = kwargs.get('history')
             name = requests.utils.quote(name)
-            r = self.get(f'/services/saved/searches/{name}', params=payload)
-            r.raise_for_status()
-            results = r.json()['entry'][0]
-            if search:
-                results = results['content']['search']
-            console = Console()
-            console.print(results)
+
+            if trigger:
+                # trigger the search
+                r = self.post(f'/services/saved/searches/{name}/dispatch',
+                              data={'output_mode': 'json', 'trigger_actions': 1})
+                r.raise_for_status()
+                sid = r.json()['sid']
+                # get the results
+                r = self.get(f'/services/search/jobs/{sid}',
+                             data={'output_mode': 'json'})
+                r.raise_for_status()
+                results = r.json()
+                console = Console()
+                console.print(results)
+
+            elif history:
+                r = self.get(f'/services/saved/searches/{name}/history',
+                              params={'output_mode': 'json'})
+                r.raise_for_status()
+                results = r.json()['entry']
+                # display results
+                table = Table('job id', 'done', title=f'History for {name}')
+                for item in results:
+                    table.add_row(item['name'], str(item['content']['isDone']))
+                console = Console()
+                console.print(table)
+
+            else:
+
+                r = self.get(f'/services/saved/searches/{name}', params={'output_mode': 'json'})
+                r.raise_for_status()
+                results = r.json()['entry'][0]['content']['search']
+                # display results
+                console = Console()
+                console.print(results)
+
         except requests.exceptions.HTTPError as e:
             print(e)
