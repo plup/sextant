@@ -81,7 +81,7 @@ class BasePlugin(Session):
 
         elif params['type'] == '1password':
             try:
-                cmd = f'op item get {params["item"]} --fields=credential'
+                cmd = f'op item get {params["item"]} --fields=credential --reveal'
                 result = subprocess.run(cmd, shell=True, check=True, capture_output=True)
                 token = result.stdout.decode().strip()
                 return token
