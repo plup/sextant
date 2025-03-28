@@ -47,6 +47,7 @@ def deshumanize(time):
 @click.group()
 @click.pass_obj
 def thehive(obj):
+    """Get events from TheHive."""
     # instantiate client from config
     config = obj['config']['endpoints']['thehive']
     obj['client'] = httpx.Client(

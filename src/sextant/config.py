@@ -13,13 +13,16 @@ class Config:
         for key in self.config['endpoints']:
             endpoint = self.config['endpoints'][key]
             if endpoint['auth']['type'] == '1password':
-                endpoint['secret'] = self.onepassword(endpoint['auth']['item'])
+                endpoint['secret'] = self.onepassword(
+                        endpoint['auth']['item'],
+                        endpoint['auth']['field']
+                    )
         return self.config
 
-    def onepassword(self, item):
+    def onepassword(self, item, field):
         """Get secrets from 1password."""
         try:
-            cmd = f'op item get {item} --fields=credential --reveal'
+            cmd = f'op item get {item} --fields={field} --reveal'
             result = subprocess.run(cmd, shell=True, check=True, capture_output=True)
             return result.stdout.decode().strip()
 
