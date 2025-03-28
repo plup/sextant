@@ -1,25 +1,17 @@
 [project]
 name = "sextant"
-version = "0.2.2"
-description = "Wrapper for observations in datalakes"
+version = "0.3"
+description = "Endpoint monitoring"
 authors = [
     { name = "Plup", email = "plup@plup.io"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.8"
 dependencies = [
+    "click",
     "rich",
-    "fido2",
-    "requests",
-    "confuse",
-    "beautifulsoup4",
-    "docstring_parser"
+    "httpx"
 ]
 
 [project.scripts]
-sextant = "sextant.cli:load"
-
-[project.optional-dependencies]
-dev = [
-    "pytest"
-]
+sextant = "sextant.cli:cli"
