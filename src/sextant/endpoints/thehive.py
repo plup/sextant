@@ -92,3 +92,11 @@ def alerts(obj, from_):
     else:
         print(r.text)
 
+@thehive.command()
+@click.argument('alert_id')
+@click.pass_obj
+def alert(obj, alert_id):
+    """Get the alert from TheHive."""
+    r = obj['client'].get(f'/api/v1/alert/{alert_id}')
+    r.raise_for_status()
+    print(r.text)
