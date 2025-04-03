@@ -49,10 +49,10 @@ def deshumanize(time):
 def thehive(obj):
     """Get events from TheHive."""
     # instantiate client from config
-    config = obj['config']['endpoints']['thehive']
+    config = obj['config'].get_endpoint('thehive')
     obj['client'] = httpx.Client(
             base_url=config['remote'],
-            headers={'Authorization': f"Bearer {config['secret']}"},
+            headers={'Authorization': f"Bearer {config['credentials']['secret']}"},
             verify = False
         )
 

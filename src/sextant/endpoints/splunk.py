@@ -8,10 +8,10 @@ from rich.table import Table
 def splunk(obj):
     """Get events from Splunk."""
     # instantiate client from config
-    config = obj['config']['endpoints']['splunk']
+    config = obj['config'].get_endpoint('splunk')
     obj['client'] = httpx.Client(
             base_url=config['remote'],
-            headers={'Authorization': f"Bearer {config['secret']}"},
+            headers={'Authorization': f"Bearer {config['credentials']['secret']}"},
             verify = False
         )
 

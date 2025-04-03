@@ -7,7 +7,7 @@ from sextant.endpoints.splunk import splunk
 @click.pass_context
 def cli(ctx):
     ctx.ensure_object(dict)
-    ctx.obj['config'] = Config().reveal()
+    ctx.obj['config'] = Config()
 
 cli.add_command(thehive)
 cli.add_command(splunk)
