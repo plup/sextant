@@ -12,10 +12,10 @@ class Config:
         """Reveal secrets from the configuration."""
         for key in self.config['endpoints']:
             endpoint = self.config['endpoints'][key]
-            if endpoint['auth']['type'] == '1password':
+            if endpoint['credential']['provider'] == '1password':
                 endpoint['secret'] = self.onepassword(
-                        endpoint['auth']['item'],
-                        endpoint['auth']['field']
+                        endpoint['credential']['item'],
+                        endpoint['credential']['field']
                     )
         return self.config
 
