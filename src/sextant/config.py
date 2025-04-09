@@ -10,7 +10,7 @@ def onepassword(vault, item, field):
         return result.stdout.decode()
 
     except subprocess.CalledProcessError as e:
-        RuntimeError(e.stderr.decode())
+        raise RuntimeError(e.stderr.decode())
 
 class Config():
 
