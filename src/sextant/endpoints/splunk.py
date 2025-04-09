@@ -1,7 +1,9 @@
 import click
 import httpx
+import json
 from rich.console import Console
 from rich.table import Table
+from rich.live import Live
 
 @click.group()
 @click.pass_obj
@@ -18,7 +20,7 @@ def splunk(obj):
 @splunk.command()
 @click.pass_obj
 def indexes(obj):
-    """Return a list of accessible indexes"""
+    """Display accessible indexes."""
     r = obj['client'].get('/services/data/indexes',
                           params={'output_mode': 'json', 'count':0, 'datatype':'all'})
     r.raise_for_status()
@@ -33,3 +35,39 @@ def indexes(obj):
     console = Console()
     console.print(table)
     console.print(f'total: {total}')
+
+@splunk.command()
+@click.option('--from', '-f', 'from_', default='10m')
+@click.option('--to', '-t', default='now')
+@click.argument('query')
+@click.pass_obj
+def query(obj, query, to, from_):
+    """
+    Run a search query.
+
+    Example of queries:
+
+     '|metadata index=_internal type=sourcetypes'
+    """
+    payload = {'search': query, 'earliest_time': f'-{from_}', 'latest_time': to,
+               'output_mode': 'json', 'preview': False, 'summarize': True}
+    with obj['client'].stream('POST', '/services/search/jobs/export', data=payload) as r:
+        r.raise_for_status()
+        # guess returned fields from first result by returning the first 5 not internal
+        try:
+            it = r.iter_lines()
+            first_result = json.loads(next(it)).get('result')
+            fields = [f for f in first_result.keys() if not f.startswith('_')][:5]
+        except AttributeError:
+            print('No result')
+            return
+
+        # build the result table
+        table = Table(*fields)
+        with Live(table, refresh_per_second=1):
+            table.add_row(*[first_result[f] for f in fields]) # display first result
+            for row in it:
+                if not row:
+                    break
+                result = json.loads(row).get('result')
+                table.add_row(*[result[f] for f in fields])
