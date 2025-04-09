@@ -1,6 +1,7 @@
 import click
 import httpx
 import json
+import sys
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
@@ -47,27 +48,38 @@ def query(obj, query, to, from_):
 
     Example of queries:
 
-     '|metadata index=_internal type=sourcetypes'
+     "search index=_internal | head 1 | fieldsummary"
+     "|metadata index=_internal type=sourcetypes"
     """
     payload = {'search': query, 'earliest_time': f'-{from_}', 'latest_time': to,
                'output_mode': 'json', 'preview': False, 'summarize': True}
     with obj['client'].stream('POST', '/services/search/jobs/export', data=payload) as r:
         r.raise_for_status()
-        # guess returned fields from first result by returning the first 5 not internal
-        try:
-            it = r.iter_lines()
-            first_result = json.loads(next(it)).get('result')
-            fields = [f for f in first_result.keys() if not f.startswith('_')][:5]
-        except AttributeError:
-            print('No result')
-            return
+        if sys.stdout.isatty():
+            # generate a live table
+            try:
+                it = r.iter_lines()
+                # guess returned fields from first result
+                first_result = json.loads(next(it)).get('result')
+                # extract 5 first common fields
+                fields = [f for f in first_result.keys() if not f.startswith('_')][:5]
+                # also keep _time if it exists
+                if first_result.get('_time'):
+                    fields.insert(0, '_time')
+            except AttributeError:
+                print('No result')
+                return
 
-        # build the result table
-        table = Table(*fields)
-        with Live(table, refresh_per_second=1):
-            table.add_row(*[first_result[f] for f in fields]) # display first result
-            for row in it:
-                if not row:
-                    break
-                result = json.loads(row).get('result')
-                table.add_row(*[result[f] for f in fields])
+            # build the result table
+            table = Table(*fields)
+            with Live(table, refresh_per_second=1):
+                table.add_row(*[first_result[f] for f in fields]) # display first result
+                for row in it:
+                    if not row:
+                        break
+                    result = json.loads(row).get('result')
+                    table.add_row(*[result[f] for f in fields])
+        else:
+            # pass lines to a pipe
+            for line in r.iter_lines():
+                print(line)
