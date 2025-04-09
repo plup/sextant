@@ -51,7 +51,8 @@ def query(obj, query, to, from_):
      "search index=_internal | head 1 | fieldsummary"
      "|metadata index=_internal type=sourcetypes"
     """
-    payload = {'search': query, 'earliest_time': f'-{from_}', 'latest_time': to,
+    payload = {'search': f'{query} | fields - _raw',
+               'earliest_time': f'-{from_}', 'latest_time': to,
                'output_mode': 'json', 'preview': False, 'summarize': True}
     with obj['client'].stream('POST', '/services/search/jobs/export', data=payload) as r:
         r.raise_for_status()
