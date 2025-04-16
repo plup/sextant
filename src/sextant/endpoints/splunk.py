@@ -61,6 +61,23 @@ def searches(obj, user, name):
     console.print(f'total: {total}')
 
 @splunk.command()
+@click.option('--trigger', is_flag=True, help='Force the search to run')
+@click.argument('name')
+@click.pass_obj
+def search(obj, name, trigger):
+    """Get the savedsearch details."""
+    if trigger:
+        r = obj['client'].post(f'/services/saved/searches/{name}/dispatch',
+                               data={'trigger_actions': 1})
+        r.raise_for_status()
+    else:
+        r = obj['client'].get(f'/services/saved/searches/{name}',
+                              params={'output_mode':'json'})
+        r.raise_for_status()
+        results = r.json()['entry'][0]
+        print(results['content']['search'])
+
+@splunk.command()
 @click.option('--from', '-f', 'from_', default='10m')
 @click.option('--to', '-t', default='now')
 @click.argument('query')
