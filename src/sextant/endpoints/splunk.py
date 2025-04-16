@@ -38,6 +38,29 @@ def indexes(obj):
     console.print(f'total: {total}')
 
 @splunk.command()
+@click.option('--name', help='Search name contains')
+@click.option('--user', help='Owner of the search')
+@click.pass_obj
+def searches(obj, user, name):
+    """Display savedsearches."""
+    payload = {'output_mode': 'json', 'count': 0, 'search': []}
+    # build search filters
+    if user:
+        payload['search'].append(f'eai:acl.owner={user}')
+    if name:
+        payload['search'].append(f'name="*{name}*"')
+
+    r = obj['client'].get('/services/saved/searches', params=payload)
+    r.raise_for_status()
+    total = r.json()['paging']['total']
+    table = Table('search', 'user', 'action', title='savedsearches')
+    for item in r.json()['entry']:
+        table.add_row(item['name'], item['acl']['owner'], item['content']['actions'])
+    console = Console()
+    console.print(table)
+    console.print(f'total: {total}')
+
+@splunk.command()
 @click.option('--from', '-f', 'from_', default='10m')
 @click.option('--to', '-t', default='now')
 @click.argument('query')
@@ -51,7 +74,7 @@ def query(obj, query, to, from_):
      "search index=_internal | head 1 | fieldsummary"
      "|metadata index=_internal type=sourcetypes"
     """
-    payload = {'search': f'{query} | fields - _raw',
+    payload = {'search': query,
                'earliest_time': f'-{from_}', 'latest_time': to,
                'output_mode': 'json', 'preview': False, 'summarize': True}
     with obj['client'].stream('POST', '/services/search/jobs/export', data=payload) as r:
