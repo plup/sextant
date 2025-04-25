@@ -75,7 +75,11 @@ def search(obj, name, trigger):
                               params={'output_mode':'json'})
         r.raise_for_status()
         results = r.json()['entry'][0]
-        print(results['content']['search'])
+        if sys.stdout.isatty():
+            # limit output to the search
+            print(results['content']['search'])
+        else:
+            print(json.dumps(results))
 
 @splunk.command()
 @click.option('--from', '-f', 'from_', default='10m')
