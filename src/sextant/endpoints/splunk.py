@@ -66,20 +66,23 @@ def searches(obj, user, name):
 @click.pass_obj
 def search(obj, name, trigger):
     """Get the savedsearch details."""
-    if trigger:
-        r = obj['client'].post(f'/services/saved/searches/{name}/dispatch',
-                               data={'trigger_actions': 1})
-        r.raise_for_status()
-    else:
-        r = obj['client'].get(f'/services/saved/searches/{name}',
-                              params={'output_mode':'json'})
-        r.raise_for_status()
-        results = r.json()['entry'][0]
-        if sys.stdout.isatty():
-            # limit output to the search
-            print(results['content']['search'])
+    try:
+        if trigger:
+            r = obj['client'].post(f'/services/saved/searches/{name}/dispatch',
+                                   data={'trigger_actions': 1})
+            r.raise_for_status()
         else:
-            print(json.dumps(results))
+            r = obj['client'].get(f'/services/saved/searches/{name}',
+                                  params={'output_mode':'json'})
+            r.raise_for_status()
+            results = r.json()['entry'][0]
+            if sys.stdout.isatty():
+                # limit output to the search
+                print(results['content']['search'])
+            else:
+                print(json.dumps(results))
+    except httpx.HTTPStatusError as e:
+        print(e.response.text)
 
 @splunk.command()
 @click.option('--from', '-f', 'from_', default='10m')
