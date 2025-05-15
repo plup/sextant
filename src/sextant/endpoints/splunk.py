@@ -6,6 +6,21 @@ from rich.console import Console
 from rich.table import Table
 from rich.live import Live
 
+def get_job_results(obj, sid):
+    """Get the search job results."""
+    try:
+        r = obj['client'].get(f'/services/search/v2/jobs/{sid}/results',
+                              params={'output_mode':'json'})
+        r.raise_for_status()
+        results = r.json()['results']
+        if sys.stdout.isatty():
+            # limit output to the search
+            print(results)
+        else:
+            print(json.dumps(results))
+    except httpx.HTTPStatusError as e:
+        print(e.response.text)
+
 @click.group()
 @click.pass_obj
 def splunk(obj):
@@ -17,6 +32,12 @@ def splunk(obj):
             headers={'Authorization': f"Bearer {config['credentials']['secret']}"},
             verify = False
         )
+
+@splunk.command()
+@click.argument('sid')
+@click.pass_obj
+def job(obj, sid):
+    return get_job_results(obj, sid)
 
 @splunk.command()
 @click.pass_obj
@@ -61,26 +82,45 @@ def searches(obj, user, name):
     console.print(f'total: {total}')
 
 @splunk.command()
-@click.option('--trigger', is_flag=True, help='Force the search to run')
 @click.argument('name')
 @click.pass_obj
-def search(obj, name, trigger):
+def search(obj, name):
     """Get the savedsearch details."""
     try:
-        if trigger:
-            r = obj['client'].post(f'/services/saved/searches/{name}/dispatch',
-                                   data={'trigger_actions': 1})
-            r.raise_for_status()
+        r = obj['client'].get(f'/services/saved/searches/{name}',
+                              params={'output_mode':'json'})
+        r.raise_for_status()
+        results = r.json()['entry'][0]
+        if sys.stdout.isatty():
+            # limit output to the search
+            print(results['content']['search'])
         else:
-            r = obj['client'].get(f'/services/saved/searches/{name}',
-                                  params={'output_mode':'json'})
-            r.raise_for_status()
-            results = r.json()['entry'][0]
-            if sys.stdout.isatty():
-                # limit output to the search
-                print(results['content']['search'])
-            else:
-                print(json.dumps(results))
+            print(json.dumps(results))
+    except httpx.HTTPStatusError as e:
+        print(e.response.text)
+
+@splunk.command()
+@click.option('--to', '-t')
+@click.option('--from', '-f', 'from_')
+@click.option('--trigger', is_flag=True, help='Trigger actions')
+@click.argument('name')
+@click.pass_obj
+def replay(obj, name, trigger, to, from_):
+    """Force the search to run and triggers."""
+    try:
+        data = {}
+        if trigger:
+            data['trigger_actions'] = 1
+        if to:
+            data['dispatch.latest_time'] = to
+        if from_:
+            data['dispatch.earliest_time'] = _from
+
+        r = obj['client'].post(f'/services/saved/searches/{name}/dispatch', data=data,
+                              params={'output_mode':'json'})
+        r.raise_for_status()
+        return get_job_results(obj, r.json()['sid'])
+
     except httpx.HTTPStatusError as e:
         print(e.response.text)
 
