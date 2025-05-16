@@ -2,24 +2,11 @@ import click
 import httpx
 import json
 import sys
+from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
-
-def get_job_results(obj, sid):
-    """Get the search job results."""
-    try:
-        r = obj['client'].get(f'/services/search/v2/jobs/{sid}/results',
-                              params={'output_mode':'json'})
-        r.raise_for_status()
-        results = r.json()['results']
-        if sys.stdout.isatty():
-            # limit output to the search
-            print(results)
-        else:
-            print(json.dumps(results))
-    except httpx.HTTPStatusError as e:
-        print(e.response.text)
+from sextant.utils import deshumanize
 
 @click.group()
 @click.pass_obj
@@ -37,7 +24,20 @@ def splunk(obj):
 @click.argument('sid')
 @click.pass_obj
 def job(obj, sid):
-    return get_job_results(obj, sid)
+    """Get the search job results."""
+    try:
+        r = obj['client'].get(f'/services/search/v2/jobs/{sid}/results',
+                              params={'output_mode':'json'})
+        r.raise_for_status()
+        results = r.json()['results']
+        if sys.stdout.isatty():
+            # limit output to the search
+            print(results)
+        else:
+            print(json.dumps(results))
+    except httpx.HTTPStatusError as e:
+        print(e.response.text)
+
 
 @splunk.command()
 @click.pass_obj
@@ -112,14 +112,27 @@ def replay(obj, name, trigger, to, from_):
         if trigger:
             data['trigger_actions'] = 1
         if to:
+            try:
+                deshumanize(to) # test relative time format
+                to = f'-{to}' # splunk use minus signs
+            except ValueError:
+                try:
+                    # assume format is iso and convert it to epoch in seconds
+                    to = int(datetime.fromisoformat(to).timestamp())
+                except ValueError:
+                    click.echo('Time format must be relative or ISO8601')
+                    return
             data['dispatch.latest_time'] = to
+            data['dispatch.time_format'] = "%s"
+
         if from_:
+            raise NotImplementedError()
             data['dispatch.earliest_time'] = _from
 
         r = obj['client'].post(f'/services/saved/searches/{name}/dispatch', data=data,
                               params={'output_mode':'json'})
         r.raise_for_status()
-        return get_job_results(obj, r.json()['sid'])
+        click.echo(r.json())
 
     except httpx.HTTPStatusError as e:
         print(e.response.text)

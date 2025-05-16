@@ -36,5 +36,5 @@ def deshumanize(time):
         if unit == 'y':
             return timedelta(years=value)
 
-    except IndexError:
-        raise RuntimeError(f'Wrong relative time format "{time}"')
+    except (AttributeError, IndexError):
+        raise ValueError(f'Wrong relative time format "{time}"')
