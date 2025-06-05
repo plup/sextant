@@ -1,6 +1,8 @@
 import sys
 import click
 import httpx
+import json
+import uuid
 from rich.console import Console
 from rich.table import Table
 from datetime import datetime
@@ -32,9 +34,23 @@ def main(ctx):
             )
 
 @main.group()
-@click.pass_obj
-def alert(obj):
+def alert():
     """Manage alerts."""
+
+@alert.command()
+@click.argument('file', type=click.File())
+@click.pass_obj
+def new (obj, file):
+    """Create an alert from a JSON file."""
+    try:
+        alert = json.load(file)
+        alert['sourceRef'] = str(uuid.uuid4())
+        r = obj['client'].post('/api/v1/alert', json=alert)
+        r.raise_for_status()
+        print(r.json())
+
+    except httpx.HTTPStatusError as e:
+        print(e.response.json())
 
 @alert.command()
 @click.option('--from', '-f', 'from_', default='10m')

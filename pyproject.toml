@@ -1,6 +1,6 @@
 [project]
 name = "sextant"
-version = "0.5"
+version = "0.6"
 description = "Endpoint monitoring"
 authors = [
     { name = "Plup", email = "plup@plup.io"}
