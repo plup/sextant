@@ -1,6 +1,6 @@
 [project]
 name = "sextant"
-version = "0.3"
+version = "0.4"
 description = "Endpoint monitoring"
 authors = [
     { name = "Plup", email = "plup@plup.io"}
@@ -15,4 +15,4 @@ dependencies = [
 ]
 
 [project.scripts]
-sextant = "sextant.cli:cli"
+sextant = "sextant.cli:entrypoint"

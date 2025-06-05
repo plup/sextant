@@ -9,18 +9,18 @@ from rich.live import Live
 from sextant.utils import deshumanize
 
 @click.group()
-@click.pass_obj
-def splunk(obj):
+@click.pass_context
+def main(ctx):
     """Get events from Splunk."""
     # instantiate client from config
-    config = obj['config'].get_endpoint('splunk')
-    obj['client'] = httpx.Client(
+    config = ctx.obj['config'].reveal(ctx.info_name)
+    ctx.obj['client'] = httpx.Client(
             base_url=config['remote'],
             headers={'Authorization': f"Bearer {config['credentials']['secret']}"},
             verify = False
         )
 
-@splunk.command()
+@main.command()
 @click.argument('sid')
 @click.pass_obj
 def job(obj, sid):
@@ -39,7 +39,7 @@ def job(obj, sid):
         print(e.response.text)
 
 
-@splunk.command()
+@main.command()
 @click.pass_obj
 def indexes(obj):
     """Display accessible indexes."""
@@ -58,7 +58,7 @@ def indexes(obj):
     console.print(table)
     console.print(f'total: {total}')
 
-@splunk.command()
+@main.command()
 @click.option('--name', help='Search name contains')
 @click.option('--user', help='Owner of the search')
 @click.pass_obj
@@ -81,7 +81,7 @@ def searches(obj, user, name):
     console.print(table)
     console.print(f'total: {total}')
 
-@splunk.command()
+@main.command()
 @click.argument('name')
 @click.pass_obj
 def search(obj, name):
@@ -99,7 +99,7 @@ def search(obj, name):
     except httpx.HTTPStatusError as e:
         print(e.response.text)
 
-@splunk.command()
+@main.command()
 @click.option('--to', '-t')
 @click.option('--from', '-f', 'from_')
 @click.option('--trigger', is_flag=True, help='Trigger actions')
@@ -137,7 +137,7 @@ def replay(obj, name, trigger, to, from_):
     except httpx.HTTPStatusError as e:
         print(e.response.text)
 
-@splunk.command()
+@main.command()
 @click.option('--from', '-f', 'from_', default='10m')
 @click.option('--to', '-t', default='now')
 @click.argument('query')
