@@ -14,11 +14,22 @@ def main(ctx):
     config = ctx.obj['config'].reveal(ctx.info_name)
 
     # expose a client
-    ctx.obj['client'] = httpx.Client(
-            base_url=config['remote'],
-            headers={'Authorization': f"Bearer {config['credentials']['secret']}"},
-            verify = False
-        )
+    if config['credentials'].get('secret'):
+        ctx.obj['client'] = httpx.Client(
+                base_url=config['remote'],
+                headers={'Authorization': f"Bearer {config['credentials']['secret']}"},
+                verify = False
+            )
+    else:
+        httpx.BasicAuth(username="username", password="secret")
+        ctx.obj['client'] = httpx.Client(
+                base_url=config['remote'],
+                auth = httpx.BasicAuth(
+                    username = config['credentials']['username'],
+                    password = config['credentials']['password']
+                ),
+                verify = False
+            )
 
 @main.group()
 @click.pass_obj
