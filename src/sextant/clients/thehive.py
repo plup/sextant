@@ -52,41 +52,45 @@ def new (obj, file):
     except httpx.HTTPStatusError as e:
         print(e.response.json())
 
-@alert.command()
+@alert.command('list')
 @click.option('--from', '-f', 'from_', default='10m')
 @click.pass_obj
-def list(obj, from_):
+def list_alert(obj, from_):
     """Get the last alerts from TheHive."""
-    # convert from filter
-    date = int((datetime.now() - deshumanize(from_)).timestamp() * 1000)
-    r = obj['client'].post(
-            '/api/v1/query',
-             json={
-                "query": [
-                    {"_name": "listAlert"},
-                    {"_name": "filter", "_gte": {"_field": "date", "_value": date}},
-                    {"_name": "sort", "_fields": [{"date": "desc"}]},
-                ],
-                "excludeFields": ["description", "summary"] # save bandwidth
-            }
-        )
-    r.raise_for_status()
-    if sys.stdout.isatty():
-        # display results
-        table = Table('id', 'ago', 'status', 'severity', 'obs', 'title', title='Alerts')
-        for alert in r.json():
-            table.add_row(
-                alert['_id'],
-                humanize(datetime.fromtimestamp(alert['date'] / 1000)),
-                alert['status'],
-                alert['severityLabel'],
-                str(alert['observableCount']),
-                alert['title'],
+    try:
+        # convert from filter
+        date = int((datetime.now() - deshumanize(from_)).timestamp() * 1000)
+        r = obj['client'].post(
+                '/api/v1/query',
+                 json={
+                    "query": [
+                        {"_name": "listAlert"},
+                        {"_name": "filter", "_gte": {"_field": "date", "_value": date}},
+                        {"_name": "sort", "_fields": [{"date": "desc"}]},
+                    ],
+                    "excludeFields": ["description", "summary"] # save bandwidth
+                }
             )
-        console = Console()
-        console.print(table)
-    else:
-        print(r.text)
+        r.raise_for_status()
+        if sys.stdout.isatty():
+            # display results
+            table = Table('id', 'ago', 'severity', 'status', 'obs', 'title', title='Alerts')
+            for alert in r.json():
+                table.add_row(
+                    alert['_id'],
+                    humanize(datetime.fromtimestamp(alert['date'] / 1000)),
+                    alert['severityLabel'],
+                    alert['status'],
+                    str(alert['observableCount']),
+                    alert['title'],
+                )
+            console = Console()
+            console.print(table)
+        else:
+            print(r.text)
+
+    except httpx.HTTPStatusError as e:
+        print(e.response.text)
 
 @alert.command()
 @click.argument('alert_id')
@@ -96,3 +100,47 @@ def get(obj, alert_id):
     r = obj['client'].get(f'/api/v1/alert/{alert_id}')
     r.raise_for_status()
     print(r.text)
+
+@main.group()
+def case():
+    """Manage cases."""
+
+@case.command('list')
+@click.option('--from', '-f', 'from_', default='10m')
+@click.pass_obj
+def list_case(obj, from_):
+    """Get the last cases from TheHive."""
+    try:
+        # convert from filter
+        date = int((datetime.now() - deshumanize(from_)).timestamp() * 1000)
+        r = obj['client'].post(
+                '/api/v1/query',
+                 json={
+                    "query": [
+                        {"_name": "listCase"},
+                        {"_name": "filter", "_gte": {"_field": "newDate", "_value": date}},
+                        {"_name": "sort", "_fields": [{"newDate": "desc"}]},
+                    ],
+                    "excludeFields": ["description", "summary"] # save bandwidth
+                }
+            )
+        r.raise_for_status()
+        if sys.stdout.isatty():
+            # display results
+            table = Table('id', 'ago', 'severity', 'status', 'stage', 'title', title='Cases')
+            for case in r.json():
+                table.add_row(
+                    case['_id'],
+                    humanize(datetime.fromtimestamp(case['newDate'] / 1000)),
+                    case['severityLabel'],
+                    case['status'],
+                    case['stage'],
+                    case['title'],
+                )
+            console = Console()
+            console.print(table)
+        else:
+            print(r.text)
+
+    except httpx.HTTPStatusError as e:
+        print(e.response.text)
