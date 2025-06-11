@@ -65,16 +65,14 @@ def get_job(obj, sid, fields, wait):
     """Get the search job results."""
     try:
         # splunk returns an empty response if the job is not finished
-        response = ''
         time = 0
-        while not response and time <= wait:
+        while time <= wait:
             r = obj['client'].get(f'/services/search/v2/jobs/{sid}/results',
                                   params={'output_mode':'json'})
             r.raise_for_status()
-            time += 3
-            if wait:
-                sleep(time)
-            response = r.text
+            if not wait or r.text:
+                break
+            sleep(time := time + 3)
         try:
             results = r.json()['results']
         except json.decoder.JSONDecodeError:
