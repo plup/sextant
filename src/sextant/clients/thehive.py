@@ -40,7 +40,7 @@ def alert():
 @alert.command()
 @click.argument('file', type=click.File())
 @click.pass_obj
-def new (obj, file):
+def new(obj, file):
     """Create an alert from a JSON file."""
     try:
         alert = json.load(file)

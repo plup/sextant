@@ -20,10 +20,14 @@ def main(ctx):
             verify = False
         )
 
-@main.command()
+@main.group()
+def job():
+    """Manage search jobs."""
+
+@job.command('get')
 @click.argument('sid')
 @click.pass_obj
-def job(obj, sid):
+def get_job(obj, sid):
     """Get the search job results."""
     try:
         r = obj['client'].get(f'/services/search/v2/jobs/{sid}/results',
@@ -58,11 +62,15 @@ def indexes(obj):
     console.print(table)
     console.print(f'total: {total}')
 
-@main.command()
+@main.group()
+def search():
+    """Manage savedsearches."""
+
+@search.command('list')
 @click.option('--name', help='Search name contains')
 @click.option('--user', help='Owner of the search')
 @click.pass_obj
-def searches(obj, user, name):
+def list_search(obj, user, name):
     """Display savedsearches."""
     payload = {'output_mode': 'json', 'count': 0, 'search': []}
     # build search filters
@@ -81,10 +89,10 @@ def searches(obj, user, name):
     console.print(table)
     console.print(f'total: {total}')
 
-@main.command()
+@search.command('get')
 @click.argument('name')
 @click.pass_obj
-def search(obj, name):
+def get_search(obj, name):
     """Get the savedsearch details."""
     try:
         r = obj['client'].get(f'/services/saved/searches/{name}',
@@ -92,42 +100,55 @@ def search(obj, name):
         r.raise_for_status()
         results = r.json()['entry'][0]
         if sys.stdout.isatty():
-            # limit output to the search
-            print(results['content']['search'])
+            # limit output to the search and common parameters
+            click.echo(click.style('Description', bold=True))
+            click.echo(click.style(results['content']['description'], italic=True))
+            click.echo(click.style('Search:', bold=True))
+            click.echo(results['content']['search'])
+            click.echo(click.style('Schedule:', bold=True))
+            click.echo(f"Cron: {results['content']['cron_schedule']}")
+            click.echo(f"Latest: {results['content']['dispatch.latest_time']}")
+            click.echo(f"Earliest: {results['content']['dispatch.earliest_time']}")
+            click.echo(click.style('Alert:', bold=True))
+            click.echo(f"Actions: {results['content']['actions']}")
         else:
-            print(json.dumps(results))
-    except httpx.HTTPStatusError as e:
-        print(e.response.text)
+            click.echo(json.dumps(results))
 
-@main.command()
+    except httpx.HTTPStatusError as e:
+        click.echo(e.response.text, err=True)
+
+@search.command('run')
 @click.option('--to', '-t')
 @click.option('--from', '-f', 'from_')
 @click.option('--trigger', is_flag=True, help='Trigger actions')
 @click.argument('name')
 @click.pass_obj
-def replay(obj, name, trigger, to, from_):
-    """Force the search to run and triggers."""
+def run_alert(obj, name, trigger, to, from_):
+    """Force the search to run and trigger alert actions."""
     try:
         data = {}
         if trigger:
             data['trigger_actions'] = 1
-        if to:
-            try:
-                deshumanize(to) # test relative time format
-                to = f'-{to}' # splunk use minus signs
-            except ValueError:
-                try:
-                    # assume format is iso and convert it to epoch in seconds
-                    to = int(datetime.fromisoformat(to).timestamp())
-                except ValueError:
-                    click.echo('Time format must be relative or ISO8601')
-                    return
-            data['dispatch.latest_time'] = to
-            data['dispatch.time_format'] = "%s"
 
-        if from_:
-            raise NotImplementedError()
-            data['dispatch.earliest_time'] = _from
+        def convert_time(time):
+            """Helper for time convertion."""
+            try:
+                return f'-{deshumanize(time)}' # test relative time format
+
+            except ValueError:
+                # assume format is iso and convert it to epoch in seconds
+                data['dispatch.time_format'] = "%s"
+                return int(datetime.fromisoformat(time).timestamp())
+
+        try:
+            if to:
+                data['dispatch.latest_time'] = convert_time(to)
+            if from_:
+                data['dispatch.earliest_time'] = convert_time(from_)
+
+        except ValueError:
+            click.echo('Time format must be relative or ISO8601')
+            return
 
         r = obj['client'].post(f'/services/saved/searches/{name}/dispatch', data=data,
                               params={'output_mode':'json'})
