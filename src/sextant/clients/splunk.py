@@ -3,10 +3,42 @@ import httpx
 import json
 import sys
 from datetime import datetime
+from time import sleep
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
 from sextant.utils import deshumanize
+
+def get_stdin(ctx, param, value):
+    """Callback reading arguments from stdin '-'."""
+    if value == '-' and not click.get_text_stream('stdin').isatty():
+        return click.get_text_stream('stdin').read().strip()
+    else:
+        return value
+
+def display_results(results, fields=None, stream=False):
+    """Display Splunk results in terminal guessing the fields if not set."""
+    if not results:
+        click.echo('No result', err=True)
+        return
+
+    try:
+        fields = fields.split(',')
+
+    except AttributeError:
+        # guess returned fields from first result public fieds
+        fields = [f for f in results[0].keys() if not f.startswith('_')][:5]
+        # always keep _time if it exists
+        if results[0].get('_time'):
+            fields.insert(0, '_time')
+
+    # build the result table
+    table = Table(*fields)
+    for row in results:
+        table.add_row(*[str(row.get(f,'NA')) for f in fields])
+
+    console = Console()
+    console.print(table)
 
 @click.group()
 @click.pass_context
@@ -25,23 +57,37 @@ def job():
     """Manage search jobs."""
 
 @job.command('get')
-@click.argument('sid')
+@click.argument('sid', callback=get_stdin)
+@click.option('--fields', default=None)
+@click.option('-w', '--wait', default=0, help='Wait for job to finish')
 @click.pass_obj
-def get_job(obj, sid):
+def get_job(obj, sid, fields, wait):
     """Get the search job results."""
     try:
-        r = obj['client'].get(f'/services/search/v2/jobs/{sid}/results',
-                              params={'output_mode':'json'})
-        r.raise_for_status()
-        results = r.json()['results']
-        if sys.stdout.isatty():
-            # limit output to the search
-            print(results)
-        else:
-            print(json.dumps(results))
-    except httpx.HTTPStatusError as e:
-        print(e.response.text)
+        # splunk returns an empty response if the job is not finished
+        response = ''
+        time = 0
+        while not response and time <= wait:
+            r = obj['client'].get(f'/services/search/v2/jobs/{sid}/results',
+                                  params={'output_mode':'json'})
+            r.raise_for_status()
+            time += 3
+            if wait:
+                sleep(time)
+            response = r.text
+        try:
+            results = r.json()['results']
+        except json.decoder.JSONDecodeError:
+            click.echo(f'Empty response fetching result for {sid}' if not r.text else r.text, err=True)
+            return
 
+        if sys.stdout.isatty():
+            display_results(results, fields)
+        else:
+            click.echo(json.dumps(results))
+
+    except httpx.HTTPStatusError as e:
+        click.echo(e.response.text, err=True)
 
 @main.command()
 @click.pass_obj
@@ -111,6 +157,7 @@ def get_search(obj, name):
             click.echo(f"Earliest: {results['content']['dispatch.earliest_time']}")
             click.echo(click.style('Alert:', bold=True))
             click.echo(f"Actions: {results['content']['actions']}")
+            click.echo(f"Expire: {results['content']['alert.expires']}")
         else:
             click.echo(json.dumps(results))
 
@@ -123,7 +170,7 @@ def get_search(obj, name):
 @click.option('--trigger', is_flag=True, help='Trigger actions')
 @click.argument('name')
 @click.pass_obj
-def run_alert(obj, name, trigger, to, from_):
+def run_search(obj, name, trigger, to, from_):
     """Force the search to run and trigger alert actions."""
     try:
         data = {}
@@ -153,10 +200,10 @@ def run_alert(obj, name, trigger, to, from_):
         r = obj['client'].post(f'/services/saved/searches/{name}/dispatch', data=data,
                               params={'output_mode':'json'})
         r.raise_for_status()
-        click.echo(r.json())
+        click.echo(r.json()['sid'])
 
     except httpx.HTTPStatusError as e:
-        print(e.response.text)
+        click.echo(e.response.text, err=True)
 
 @main.command()
 @click.option('--from', '-f', 'from_', default='10m')
