@@ -6,14 +6,16 @@ from sextant import SextantConfigurationError
 def onepassword(vault, item, field):
     """Get secrets from 1password."""
     try:
-        cmd = f'op read -n op://{vault}/{item}/{field}'
-        result = subprocess.run(cmd, shell=True, check=True, capture_output=True)
+        result = subprocess.run(
+            ["op", "read", "-n", f"op://{vault}/{item}/{field}"],
+            check=True, capture_output=True,
+        )
         return result.stdout.decode()
 
     except subprocess.CalledProcessError as e:
         raise SextantConfigurationError(e.stderr.decode())
 
-class SextantConfig():
+class SextantConfig:
 
     def __init__(self, file=Path('~/.config/sextant/config.yaml')):
         try:

@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup as Soup
 logger = logging.getLogger(__name__)
 
 
-class OktaClient(object):
+class OktaClient:
     """Client for Okta authentication supporting WebAuthn only."""
     def __init__(self, username, password, endpoint):
         """Set parameters for Okta only."""

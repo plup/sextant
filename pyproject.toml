@@ -6,12 +6,22 @@ authors = [
     { name = "Plup", email = "plup@plup.io"}
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
-    "click",
-    "pyyaml",
-    "rich",
-    "httpx"
+    "click>=8.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "httpx>=0.24",
+]
+
+[project.optional-dependencies]
+auth = [
+    "requests>=2.28",
+    "fido2>=1.0",
+    "beautifulsoup4>=4.12",
+]
+dev = [
+    "pytest>=8.0",
 ]
 
 [project.scripts]

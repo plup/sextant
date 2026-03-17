@@ -17,7 +17,7 @@ class CliInteraction(UserInteraction):
         return getpass("FIDO2 PIN: ")
 
 
-class WebAuthnClient(object):
+class WebAuthnClient:
 
     def __init__(self, url, authenticator, user_verification):
         self.name = authenticator
