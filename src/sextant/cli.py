@@ -1,5 +1,6 @@
 import click
 from importlib import import_module
+from importlib.metadata import version
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
@@ -12,6 +13,7 @@ def entrypoint():
         config = SextantConfig()
 
         @click.group()
+        @click.version_option(version("sextant"), prog_name="sextant")
         @click.pass_context
         def cli(ctx):
             """Sextant."""

@@ -554,7 +554,7 @@ wheels = [
 
 [[package]]
 name = "sextant"
-version = "0.7"
+version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "click" },
