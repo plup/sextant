@@ -2,9 +2,11 @@ import sys
 import click
 import httpx
 import json
-import zipfile
+import logging
 from datetime import datetime
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 from rich.console import Console
 from rich.table import Table
 from sextant.utils import Lazy, humanize, deshumanize
@@ -218,12 +220,49 @@ def list_scripts(obj, query, os_types, limit):
         click.echo(e.response.text, err=True)
 
 
+def display_script_results(results):
+    """Display script results to the terminal or as JSON when piped."""
+    if not sys.stdout.isatty():
+        click.echo(json.dumps([
+            {
+                'agent': r.agent_name,
+                'status': r.status,
+                'stdout': r.stdout,
+                'stderr': r.stderr,
+                'error': r.error,
+            }
+            for r in results
+        ]))
+        return
+
+    for result in results:
+        header = click.style(f"[{result.agent_name}]", bold=True) + f" ({result.status})"
+        if result.path:
+            header += f" {result.path}"
+        click.echo(header)
+
+        if result.error:
+            click.echo(click.style(result.error, fg='red'), err=True)
+            continue
+        if not result.path:
+            click.echo(f"  {result.detail}")
+            continue
+
+        for name, size in result.files:
+            log.info(f"  {name} ({size}B)")
+        if result.stdout:
+            click.echo(result.stdout)
+        if result.stderr:
+            click.echo(click.style(result.stderr, fg='red'), err=True)
+
+
 @script.command('run')
 @click.argument('script_id')
-@click.option('--agent', '-a', 'agent_name', default=None, help='Target agent by hostname')
+@click.option('--agent', '-a', 'agent_names', multiple=True, help='Target agent(s) by hostname (repeatable)')
 @click.option('--group', '-g', 'group_ids', default=None, help='Target agents by group ID (comma-separated)')
 @click.option('--site', '-s', 'site_ids', default=None, help='Target agents by site ID (comma-separated)')
 @click.option('--all', 'target_all', is_flag=True, help='Target all agents')
+@click.option('--watch', '-w', is_flag=True, help='Wait for completion and show results')
 @click.option('--params', '-p', 'input_params', default=None, help='Input parameters for the script')
 @click.option('--description', '-d', 'description', default='sextant remote script execution', help='Task description')
 @click.option('--timeout', '-t', default=3600, help='Script runtime timeout in seconds')
@@ -231,17 +270,20 @@ def list_scripts(obj, query, os_types, limit):
               type=click.Choice(['SentinelCloud', 'Local', 'None'], case_sensitive=True),
               help='Output destination')
 @click.pass_obj
-def run_script(obj, script_id, agent_name, group_ids, site_ids, target_all,
-               input_params, description, timeout, output_dest):
+def run_script(obj, script_id, agent_names, group_ids, site_ids, target_all,
+               watch, input_params, description, timeout, output_dest):
     """Execute a remote script on one or more agents.
 
-    Target agents with --agent (single hostname), --group, --site, or --all.
+    Target agents with --agent (repeatable), --group, --site, or --all.
     """
     try:
         agent_filter = {}
-        if agent_name:
-            agent = obj['client'].get_agent(agent_name)
-            agent_filter['ids'] = [agent['id']]
+        if agent_names:
+            ids = []
+            for name in agent_names:
+                agent = obj['client'].get_agent(name)
+                ids.append(agent['id'])
+            agent_filter['ids'] = ids
         elif group_ids:
             agent_filter['groupIds'] = [g.strip() for g in group_ids.split(',')]
         elif site_ids:
@@ -262,8 +304,24 @@ def run_script(obj, script_id, agent_name, group_ids, site_ids, target_all,
 
         if result.get('pending'):
             click.echo(f"pending approval (id: {result.get('pendingExecutionId', '')})")
-        else:
-            click.echo(f"task started (id: {result.get('parentTaskId', '')}), affected: {result.get('affected', 0)}")
+            return
+
+        task_id = result.get('parentTaskId', '')
+        click.echo(f"task started (id: {task_id}), affected: {result.get('affected', 0)}")
+
+        if watch and task_id:
+            def on_poll(tasks):
+                counts = {}
+                for t in tasks:
+                    s = t.get('status', 'unknown')
+                    counts[s] = counts.get(s, 0) + 1
+                summary = ', '.join(f"{s}: {n}" for s, n in sorted(counts.items()))
+                log.info(f"polling... {summary}")
+
+            obj['client'].wait_for_script(task_id, on_poll=on_poll)
+
+            results = obj['client'].fetch_script_results(task_id, '/tmp')
+            display_script_results(results)
 
     except LookupError as e:
         click.echo(str(e), err=True)
@@ -298,47 +356,16 @@ def script_status(obj, task_id):
 
 @script.command('results')
 @click.argument('task_id')
-@click.option('--output', '-o', 'output_dir', default='.', help='Directory to save result files')
+@click.option('--output', '-o', 'output_dir', default='/tmp', help='Directory to save result files')
 @click.pass_obj
 def script_results(obj, task_id, output_dir):
     """Download script result files by parent task ID."""
     try:
-        tasks, _ = obj['client'].get_script_status(task_id)
-        task_ids = [t['id'] for t in tasks]
-        if not task_ids:
-            click.echo('no tasks found for this task id', err=True)
-            return
+        results = obj['client'].fetch_script_results(task_id, output_dir)
+        display_script_results(results)
 
-        links, errors = obj['client'].get_script_results(task_ids)
-
-        for link in links:
-            raw_name = link.get('fileName', f"{link.get('taskId', 'unknown')}.zip")
-            filename = raw_name.removesuffix('.zip') if raw_name.endswith('.zip.zip') else raw_name
-            dest = Path(output_dir) / filename
-            click.echo(f"downloading {filename}...")
-            obj['client'].download_file(link['downloadUrl'], dest)
-            click.echo(f"saved {dest}")
-
-            with zipfile.ZipFile(dest) as zf:
-                entries = zf.namelist()
-                click.echo(click.style(f"[files]", bold=True))
-                for name in entries:
-                    size = zf.getinfo(name).file_size
-                    click.echo(f"  {name} ({size}B)")
-                for name in entries:
-                    if name.startswith(('stdout', 'stderr')):
-                        label = 'stderr' if name.startswith('stderr') else 'stdout'
-                        content = zf.read(name).decode(errors='replace').rstrip()
-                        if content:
-                            click.echo(click.style(f"[{label}]", bold=True))
-                            click.echo(content)
-
-        for err in errors:
-            click.echo(f"error for task {err.get('taskId', '')}: {err.get('errorString', '')}", err=True)
-
-        if not links and not errors:
-            click.echo('no results available yet')
-
+    except LookupError as e:
+        click.echo(str(e), err=True)
     except httpx.HTTPStatusError as e:
         click.echo(e.response.text, err=True)
 

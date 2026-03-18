@@ -1,4 +1,23 @@
 import httpx
+import zipfile
+from dataclasses import dataclass, field
+from pathlib import Path
+from time import sleep
+
+
+@dataclass
+class ScriptResult:
+    """Result of a remote script execution on a single agent."""
+    task_id: str
+    agent_id: str
+    agent_name: str
+    status: str
+    detail: str
+    path: Path | None = None
+    files: list[tuple[str, int]] = field(default_factory=list)
+    stdout: str = ''
+    stderr: str = ''
+    error: str = ''
 
 
 class SentinelOneClient:
@@ -110,6 +129,8 @@ class SentinelOneClient:
         r.raise_for_status()
         return r.json()['data']
 
+    TERMINAL_STATUSES = {'completed', 'failed', 'canceled', 'expired', 'partially_completed'}
+
     def get_script_status(self, parent_task_id, limit=50):
         """Return execution status for tasks under a parent task ID."""
         params = {'parentTaskId': parent_task_id, 'limit': limit}
@@ -117,6 +138,19 @@ class SentinelOneClient:
         r.raise_for_status()
         body = r.json()
         return body['data'], body['pagination']
+
+    def wait_for_script(self, parent_task_id, interval=5, on_poll=None):
+        """Poll until all tasks under a parent task reach a terminal status.
+
+        Calls on_poll(tasks) on each poll if provided. Returns the final task list.
+        """
+        while True:
+            tasks, _ = self.get_script_status(parent_task_id)
+            if on_poll:
+                on_poll(tasks)
+            if tasks and all(t.get('status') in self.TERMINAL_STATUSES for t in tasks):
+                return tasks
+            sleep(interval)
 
     def get_script_results(self, task_ids):
         """Fetch download URLs for completed script task results."""
@@ -135,6 +169,57 @@ class SentinelOneClient:
             with open(dest, 'wb') as f:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
+
+    def fetch_script_results(self, parent_task_id, output_dir):
+        """Download script results for a parent task and extract output.
+
+        Returns a list of ScriptResult, one per agent task.
+        Raises LookupError if no tasks are found.
+        """
+        tasks, _ = self.get_script_status(parent_task_id)
+        if not tasks:
+            raise LookupError(f"no tasks found for {parent_task_id}")
+
+        task_dir = Path(output_dir) / parent_task_id
+        task_dir.mkdir(parents=True, exist_ok=True)
+
+        tasks_by_id = {t['id']: t for t in tasks}
+        links, fetch_errors = self.get_script_results(list(tasks_by_id))
+
+        links_by_task = {link['taskId']: link for link in links}
+        error_by_task = {err['taskId']: err.get('errorString', '') for err in fetch_errors}
+
+        results = []
+        for task_id, task in tasks_by_id.items():
+            result = ScriptResult(
+                task_id=task_id,
+                agent_id=task.get('agentId', ''),
+                agent_name=task.get('agentComputerName', ''),
+                status=task.get('status', ''),
+                detail=task.get('detailedStatus', ''),
+            )
+
+            if task_id in error_by_task:
+                result.error = error_by_task[task_id]
+            elif task_id in links_by_task:
+                link = links_by_task[task_id]
+                agent_name = task.get('agentComputerName', task_id)
+                dest = task_dir / f"{agent_name}_{task_id}.zip"
+                self.download_file(link['downloadUrl'], dest)
+                result.path = dest
+
+                with zipfile.ZipFile(dest) as zf:
+                    for name in zf.namelist():
+                        if name.startswith('stdout'):
+                            result.stdout = zf.read(name).decode(errors='replace').rstrip()
+                        elif name.startswith('stderr'):
+                            result.stderr = zf.read(name).decode(errors='replace').rstrip()
+                        else:
+                            result.files.append((name, zf.getinfo(name).file_size))
+
+            results.append(result)
+
+        return results
 
     def list_activities(self, limit=50, cursor=None, activity_types=None,
                         created_after=None, created_before=None):

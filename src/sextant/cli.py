@@ -1,4 +1,5 @@
 import click
+import logging
 from importlib import import_module
 from importlib.metadata import version
 from rich import print as rprint
@@ -15,11 +16,18 @@ def entrypoint():
 
         @click.group()
         @click.version_option(version("sextant"), prog_name="sextant")
+        @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
         @click.pass_context
-        def cli(ctx):
+        def cli(ctx, verbose):
             """Sextant."""
             ctx.ensure_object(dict)
             ctx.obj['config'] = config
+            log = logging.getLogger('sextant')
+            log.setLevel(logging.INFO if verbose else logging.WARNING)
+            if not log.handlers:
+                handler = logging.StreamHandler()
+                handler.setFormatter(logging.Formatter('%(message)s'))
+                log.addHandler(handler)
 
         @cli.command()
         def check():
