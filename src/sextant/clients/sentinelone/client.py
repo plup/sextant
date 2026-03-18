@@ -128,15 +128,14 @@ class SentinelOneClient:
         raise LookupError(f"script '{name}' not found")
 
     def execute_script(self, script_id, agent_filter, description,
-                       output_destination='SentinelCloud', input_params=None,
-                       timeout=3600):
+                       input_params=None, timeout=3600):
         """Execute a remote script on agents matching the filter. Return the task response."""
         payload = {
             'filter': agent_filter,
             'data': {
                 'scriptId': script_id,
                 'taskDescription': description,
-                'outputDestination': output_destination,
+                'outputDestination': 'SentinelCloud',
                 'scriptRuntimeTimeoutSeconds': timeout,
             },
         }

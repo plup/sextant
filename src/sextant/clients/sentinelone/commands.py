@@ -98,7 +98,14 @@ def agent():
 @click.pass_obj
 @handle_errors
 def list_agents(obj, query, active, limit):
-    """List agents."""
+    """List agents.
+
+    \b
+    Examples:
+      sextant s1 agent list
+      sextant s1 agent list -q myhost
+      sextant s1 agent list --active -n 10
+    """
     agents, pagination = obj['client'].list_agents(
         limit=limit, query=query, active=active,
     )
@@ -133,7 +140,12 @@ def list_agents(obj, query, active, limit):
 @click.pass_obj
 @handle_errors
 def get_agent(obj, name):
-    """Get agent details by hostname."""
+    """Get agent details by hostname.
+
+    \b
+    Examples:
+      sextant s1 agent get myhost
+    """
     a = obj['client'].get_agent(name)
     if sys.stdout.isatty():
         click.echo(click.style('Agent Info', bold=True))
@@ -155,18 +167,22 @@ def get_agent(obj, name):
 @agent.command('fetch')
 @click.argument('files', nargs=-1, required=True)
 @target_options
-@click.option('--watch', '-w', is_flag=True, help='Wait for upload and download the file')
+@click.option('--wait', '-w', is_flag=True, help='Wait for upload and download the file')
 @click.option('--output', '-o', 'output_dir', default='/tmp', help='Directory to save downloaded file')
 @click.option('--timeout', '-t', default=300, help='Max seconds to wait for upload')
 @click.pass_obj
 @handle_errors
-def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, watch, output_dir, timeout):
+def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, wait, output_dir, timeout):
     """Fetch files from one or more agents.
 
-    Requests agents to upload the specified files as a password-protected
-    archive. Use --watch to wait for the upload and download automatically.
+    Requests agents to upload the specified files as an archive.
+    Use --wait to wait for the upload and download automatically.
 
-    Target agents with --agent (repeatable), --group, --site, or --all.
+    \b
+    Examples:
+      sextant s1 agent fetch /etc/passwd -a myhost --wait
+      sextant s1 agent fetch /var/log/syslog /etc/hosts -a host1 -a host2 -w
+      sextant s1 agent fetch /tmp/report.log --group 12345 --wait
     """
     agents = resolve_agents(obj['client'], agent_names, group_ids, site_ids, target_all)
     if not agents:
@@ -184,7 +200,7 @@ def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, watch,
             continue
         click.echo(f"fetch requested for {len(file_list)} file(s) from {hostname}")
 
-    if not watch:
+    if not wait:
         return
 
     for ag in agents:
@@ -192,7 +208,7 @@ def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, watch,
         hostname = ag.get('computerName', agent_id)
 
         def on_poll():
-            log.info(f"waiting for upload from {hostname}...")
+            click.echo(f"waiting for upload from {hostname}...", err=True)
 
         try:
             activity = obj['client'].wait_for_upload(
@@ -215,7 +231,10 @@ def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, watch,
 def download_upload(obj, name, activity_id, output_dir):
     """Download a previously uploaded file archive from an agent.
 
-    Use the activity ID from the activity log.
+    \b
+    Examples:
+      sextant s1 agent download myhost 123456789
+      sextant s1 agent download myhost 123456789 -o /tmp/results
     """
     ag = obj['client'].get_agent(name)
     hostname = ag.get('computerName', name)
@@ -238,7 +257,14 @@ def threat():
 @click.pass_obj
 @handle_errors
 def list_threats(obj, incident_status, from_, limit):
-    """List threats."""
+    """List threats.
+
+    \b
+    Examples:
+      sextant s1 threat list
+      sextant s1 threat list --status unresolved
+      sextant s1 threat list --status unresolved --from 7d
+    """
     created_after = None
     if from_:
         created_after = (datetime.utcnow() - deshumanize(from_)).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -274,7 +300,12 @@ def list_threats(obj, incident_status, from_, limit):
 @click.pass_obj
 @handle_errors
 def get_threat(obj, threat_id):
-    """Get threat details."""
+    """Get threat details.
+
+    \b
+    Examples:
+      sextant s1 threat get 123456789
+    """
     t = obj['client'].get_threat(threat_id)
     if sys.stdout.isatty():
         info = t.get('threatInfo', {})
@@ -307,7 +338,14 @@ def script():
 @click.pass_obj
 @handle_errors
 def list_scripts(obj, query, os_types, limit):
-    """List available remote scripts."""
+    """List available remote scripts.
+
+    \b
+    Examples:
+      sextant s1 script list
+      sextant s1 script list -q "collect"
+      sextant s1 script list --os linux
+    """
     scripts, pagination = obj['client'].list_scripts(
         limit=limit, query=query, os_types=os_types,
     )
@@ -368,20 +406,23 @@ def display_script_results(results):
 @script.command('run')
 @click.argument('script_name')
 @target_options
-@click.option('--watch', '-w', is_flag=True, help='Wait for completion and show results')
+@click.option('--wait', '-w', is_flag=True, help='Wait for completion and show results')
 @click.option('--params', '-p', 'input_params', default=None, help='Input parameters for the script')
 @click.option('--description', '-d', 'description', default='sextant remote script execution', help='Task description')
 @click.option('--timeout', '-t', default=3600, help='Script runtime timeout in seconds')
-@click.option('--output', 'output_dest', default='SentinelCloud',
-              type=click.Choice(['SentinelCloud', 'Local', 'None'], case_sensitive=True),
-              help='Output destination')
+@click.option('--output', '-o', 'output_dir', default='/tmp', help='Directory to save result files')
 @click.pass_obj
 @handle_errors
 def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all,
-               watch, input_params, description, timeout, output_dest):
+               wait, input_params, description, timeout, output_dir):
     """Execute a remote script on one or more agents.
 
-    Target agents with --agent (repeatable), --group, --site, or --all.
+    \b
+    Examples:
+      sextant s1 script run "My Script" -a myhost
+      sextant s1 script run "My Script" -a host1 -a host2 --wait
+      sextant s1 script run "My Script" --all --wait
+      sextant s1 script run "My Script" -a myhost -p "arg1 arg2" -w
     """
     script = obj['client'].get_script(script_name)
     agent_filter = build_agent_filter(
@@ -392,7 +433,6 @@ def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all,
         script_id=script['id'],
         agent_filter=agent_filter,
         description=description,
-        output_destination=output_dest,
         input_params=input_params,
         timeout=timeout,
     )
@@ -404,18 +444,18 @@ def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all,
     task_id = result.get('parentTaskId', '')
     click.echo(f"task started (id: {task_id}), affected: {result.get('affected', 0)}")
 
-    if watch and task_id:
+    if wait and task_id:
         def on_poll(tasks):
             counts = {}
             for t in tasks:
                 s = t.get('status', 'unknown')
                 counts[s] = counts.get(s, 0) + 1
             summary = ', '.join(f"{s}: {n}" for s, n in sorted(counts.items()))
-            log.info(f"polling... {summary}")
+            click.echo(f"polling... {summary}", err=True)
 
         obj['client'].wait_for_script(task_id, on_poll=on_poll)
 
-        results = obj['client'].fetch_script_results(task_id, '/tmp')
+        results = obj['client'].fetch_script_results(task_id, output_dir)
         display_script_results(results)
 
 
@@ -424,7 +464,12 @@ def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all,
 @click.pass_obj
 @handle_errors
 def script_status(obj, task_id):
-    """Check execution status of a remote script task."""
+    """Check execution status of a remote script task.
+
+    \b
+    Examples:
+      sextant s1 script status 123456789
+    """
     tasks, pagination = obj['client'].get_script_status(task_id)
 
     if sys.stdout.isatty():
@@ -446,7 +491,13 @@ def script_status(obj, task_id):
 @click.pass_obj
 @handle_errors
 def script_results(obj, task_id, output_dir):
-    """Download script result files by parent task ID."""
+    """Download script result files by parent task ID.
+
+    \b
+    Examples:
+      sextant s1 script results 123456789
+      sextant s1 script results 123456789 -o /tmp/results
+    """
     results = obj['client'].fetch_script_results(task_id, output_dir)
     display_script_results(results)
 
@@ -462,7 +513,14 @@ def activity():
 @click.pass_obj
 @handle_errors
 def list_activities(obj, from_, limit):
-    """List recent activities."""
+    """List recent activities.
+
+    \b
+    Examples:
+      sextant s1 activity list
+      sextant s1 activity list --from 24h
+      sextant s1 activity list --from 7d -n 100
+    """
     since = (datetime.utcnow() - deshumanize(from_)).strftime('%Y-%m-%dT%H:%M:%SZ')
     activities, pagination = obj['client'].list_activities(
         limit=limit, created_after=since,
