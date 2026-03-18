@@ -4,6 +4,7 @@ from importlib.metadata import version
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
+import httpx
 from sextant import SextantError, SextantConfigurationError
 from sextant.config import SextantConfig
 
@@ -39,6 +40,8 @@ def entrypoint():
                         client.http.close()
                 except ModuleNotFoundError:
                     table.add_row(name, client_type, '[yellow]skip[/yellow]', 'client not found')
+                except httpx.HTTPStatusError as e:
+                    table.add_row(name, client_type, '[red]error[/red]', f"{e.response.status_code} {e.response.reason_phrase}")
                 except Exception as e:
                     table.add_row(name, client_type, '[red]error[/red]', str(e))
 
