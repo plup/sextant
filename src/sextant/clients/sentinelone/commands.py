@@ -366,7 +366,7 @@ def display_script_results(results):
 
 
 @script.command('run')
-@click.argument('script_id')
+@click.argument('script_name')
 @target_options
 @click.option('--watch', '-w', is_flag=True, help='Wait for completion and show results')
 @click.option('--params', '-p', 'input_params', default=None, help='Input parameters for the script')
@@ -377,18 +377,19 @@ def display_script_results(results):
               help='Output destination')
 @click.pass_obj
 @handle_errors
-def run_script(obj, script_id, agent_names, group_ids, site_ids, target_all,
+def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all,
                watch, input_params, description, timeout, output_dest):
     """Execute a remote script on one or more agents.
 
     Target agents with --agent (repeatable), --group, --site, or --all.
     """
+    script = obj['client'].get_script(script_name)
     agent_filter = build_agent_filter(
         obj['client'], agent_names, group_ids, site_ids, target_all,
     )
 
     result = obj['client'].execute_script(
-        script_id=script_id,
+        script_id=script['id'],
         agent_filter=agent_filter,
         description=description,
         output_destination=output_dest,
@@ -427,10 +428,9 @@ def script_status(obj, task_id):
     tasks, pagination = obj['client'].get_script_status(task_id)
 
     if sys.stdout.isatty():
-        table = Table('id', 'agent', 'status', 'details', title='Script Status')
+        table = Table('agent', 'status', 'details', title='Script Status')
         for t in tasks:
             table.add_row(
-                t.get('id', ''),
                 t.get('agentComputerName', ''),
                 t.get('status', ''),
                 t.get('detailedStatus', ''),

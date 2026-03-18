@@ -119,6 +119,14 @@ class SentinelOneClient:
         body = r.json()
         return body['data'], body['pagination']
 
+    def get_script(self, name):
+        """Return a single script dict matching the given name."""
+        scripts, _ = self.list_scripts(query=name, limit=10)
+        for s in scripts:
+            if s.get('scriptName') == name:
+                return s
+        raise LookupError(f"script '{name}' not found")
+
     def execute_script(self, script_id, agent_filter, description,
                        output_destination='SentinelCloud', input_params=None,
                        timeout=3600):
