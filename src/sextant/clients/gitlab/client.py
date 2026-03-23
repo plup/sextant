@@ -1,4 +1,7 @@
+import logging
 import httpx
+
+logger = logging.getLogger('sextant')
 
 
 class GitLabClient:
@@ -7,6 +10,24 @@ class GitLabClient:
     def __init__(self, http: httpx.Client):
         self.http = http
 
+    def paginate(self, path, params=None):
+        """Yield all items from a paginated GitLab endpoint."""
+        params = dict(params or {})
+        params.setdefault('per_page', 100)
+        page = 1
+        while True:
+            params['page'] = page
+            r = self.http.get(path, params=params)
+            r.raise_for_status()
+            items = r.json()
+            if not items:
+                break
+            yield from items
+            next_page = r.headers.get('x-next-page', '')
+            if not next_page:
+                break
+            page = int(next_page)
+
     @classmethod
     def from_config(cls, config):
         """Build a GitLabClient from a revealed endpoint config dict."""
@@ -14,6 +35,7 @@ class GitLabClient:
             base_url=config['remote'],
             headers={'PRIVATE-TOKEN': config['credentials']['secret']},
             verify=config.get('verify', True),
+            timeout=120,
         )
         return cls(http)
 
@@ -99,3 +121,24 @@ class GitLabClient:
         )
         r.raise_for_status()
         return r.json()
+
+    def list_registry_repositories(self, project_id):
+        """Return container registry repositories for a project."""
+        return list(self.paginate(
+            f'/api/v4/projects/{project_id}/registry/repositories',
+            params={'tags': True, 'tags_count': True},
+        ))
+
+    def list_all_images(self, include_personal=False):
+        """Yield (project, repositories) for every project with images."""
+        params = {'archived': 'false', 'simple': 'true', 'order_by': 'path', 'sort': 'asc'}
+        for project in self.paginate('/api/v4/projects', params):
+            if not include_personal and project.get('namespace', {}).get('kind') == 'user':
+                continue
+            try:
+                repos = self.list_registry_repositories(project['id'])
+            except httpx.HTTPStatusError as e:
+                logger.info(f"{project['path_with_namespace']}: {e.response.status_code}")
+                continue
+            if repos:
+                yield project, repos

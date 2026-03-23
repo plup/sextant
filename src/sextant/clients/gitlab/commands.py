@@ -1,11 +1,15 @@
+import logging
 import sys
 import click
 import httpx
 import json
 from rich.console import Console
+from rich.live import Live
 from rich.table import Table
 from sextant.utils import Lazy
 from sextant.clients.gitlab.client import GitLabClient
+
+logger = logging.getLogger('sextant')
 
 
 PIPELINE_STATUS_STYLE = {
@@ -86,6 +90,53 @@ def get_project(obj, project_id):
             click.echo(f"Open issues: {p['open_issues_count']}")
         else:
             click.echo(json.dumps(p))
+
+    except httpx.HTTPStatusError as e:
+        click.echo(e.response.text, err=True)
+
+
+@main.command()
+@click.option('--search', '-s', help='Filter images by name')
+@click.option('--personal', is_flag=True, help='Include personal (user-namespace) projects')
+@click.pass_obj
+def images(obj, search, personal):
+    """List all container images across all projects."""
+    try:
+        stream = obj['client'].list_all_images(include_personal=personal)
+
+        def matches(repo):
+            return not search or search.lower() in repo['path'].lower()
+
+        if not sys.stdout.isatty():
+            for project, repos in stream:
+                for repo in repos:
+                    if not matches(repo):
+                        continue
+                    repo['project'] = project['path_with_namespace']
+                    click.echo(json.dumps(repo))
+            return
+
+        table = Table('project', 'image', 'tags')
+        if logger.isEnabledFor(logging.INFO):
+            for project, repos in stream:
+                for repo in repos:
+                    if matches(repo):
+                        table.add_row(
+                            project['path_with_namespace'],
+                            repo['path'],
+                            str(repo.get('tags_count', 0)),
+                        )
+            Console().print(table)
+        else:
+            with Live(table, refresh_per_second=2):
+                for project, repos in stream:
+                    for repo in repos:
+                        if matches(repo):
+                            table.add_row(
+                                project['path_with_namespace'],
+                                repo['path'],
+                                str(repo.get('tags_count', 0)),
+                            )
 
     except httpx.HTTPStatusError as e:
         click.echo(e.response.text, err=True)
