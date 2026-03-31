@@ -43,6 +43,7 @@ copy_match() {
 }
 
 for pattern in "$@"; do
+  [[ "$pattern" == "~" ]] && pattern="~/"
   if [[ "$pattern" == /* ]]; then
     copy_match "$pattern"
   elif [[ "$pattern" == "~/"* ]]; then

@@ -2,6 +2,7 @@ import functools
 import json
 import logging
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -31,13 +32,60 @@ def handle_errors(f):
     return wrapper
 
 
+def read_hosts_file(path):
+    """Read hostnames from a file, one per line, skipping blanks and comments."""
+    hosts = []
+    for line in Path(path).read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+            hosts.append(line)
+    return tuple(hosts)
+
+
 def target_options(f):
     """Shared click options for agent targeting."""
     f = click.option('--all', 'target_all', is_flag=True, help='Target all active agents')(f)
     f = click.option('--site', '-s', 'site_ids', default=None, help='Target agents by site ID (comma-separated)')(f)
     f = click.option('--group', '-g', 'group_ids', default=None, help='Target agents by group ID (comma-separated)')(f)
     f = click.option('--agent', '-a', 'agent_names', multiple=True, help='Target agent(s) by hostname (repeatable)')(f)
+    f = click.option('--file', '-f', 'hosts_file', type=click.Path(exists=True), default=None, help='File containing hostnames (one per line)')(f)
     return f
+
+
+def resolve_target_names(agent_names, hosts_file):
+    """Return agent names from either --agent or --file (mutually exclusive)."""
+    if agent_names and hosts_file:
+        raise click.UsageError('--agent and --file are mutually exclusive')
+    if hosts_file:
+        return read_hosts_file(hosts_file)
+    return agent_names
+
+
+def wait_for_online(client, names, interval=30, timeout=3600, on_poll=None):
+    """Poll until all named agents report as active. Returns list of agent dicts."""
+    deadline = time.monotonic() + timeout
+    pending = set(names)
+    agents = {}
+
+    while pending:
+        for name in list(pending):
+            try:
+                agent = client.get_agent(name)
+                if agent.get('isActive'):
+                    agents[name] = agent
+                    pending.discard(name)
+            except LookupError:
+                pass
+
+        if not pending:
+            break
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"agents not online within {timeout}s: {', '.join(sorted(pending))}")
+        if on_poll:
+            on_poll(pending)
+        time.sleep(interval)
+
+    return [agents[name] for name in names]
 
 
 def resolve_agents(client, agent_names=None, group_ids=None, site_ids=None, target_all=False):
@@ -164,6 +212,72 @@ def get_agent(obj, name):
         click.echo(json.dumps(a))
 
 
+@agent.command('check')
+@target_options
+@click.pass_obj
+@handle_errors
+def check_agents(obj, agent_names, group_ids, site_ids, target_all, hosts_file):
+    """Check whether targeted agents are online.
+
+    \b
+    Examples:
+      sextant s1 agent check -a myhost
+      sextant s1 agent check -a host1 -a host2
+      sextant s1 agent check -f hosts.txt
+      sextant s1 agent check --group 12345
+    """
+    names = resolve_target_names(agent_names, hosts_file)
+    if names:
+        agents = []
+        for name in names:
+            try:
+                agents.append(obj['client'].get_agent(name))
+            except LookupError:
+                agents.append({'computerName': name, 'isActive': False, 'notFound': True})
+    elif group_ids or site_ids or target_all:
+        agents = resolve_agents(obj['client'], group_ids=group_ids, site_ids=site_ids, target_all=target_all)
+    else:
+        raise click.UsageError('Specify a target: --agent, --file, --group, --site, or --all')
+
+    if not agents:
+        raise LookupError('no agents matched the target filter')
+
+    if sys.stdout.isatty():
+        table = Table('hostname', 'status', 'last active', title='Agent Status')
+        for a in agents:
+            hostname = a.get('computerName', '')
+            if a.get('notFound'):
+                status = '[yellow]not found[/yellow]'
+                last_active = ''
+            elif a.get('isActive'):
+                status = '[green]online[/green]'
+            else:
+                status = '[red]offline[/red]'
+            if not a.get('notFound'):
+                last_active = a.get('lastActiveDate', '')
+                if last_active:
+                    try:
+                        last_active = humanize(datetime.fromisoformat(last_active.replace('Z', '+00:00')).replace(tzinfo=None))
+                    except (ValueError, AttributeError):
+                        pass
+            table.add_row(hostname, status, last_active)
+        console = Console()
+        console.print(table)
+        online = sum(1 for a in agents if a.get('isActive'))
+        found = sum(1 for a in agents if not a.get('notFound'))
+        console.print(f"online: {online}/{found}")
+    else:
+        click.echo(json.dumps([
+            {
+                'hostname': a.get('computerName', ''),
+                'active': a.get('isActive', False),
+                'lastActiveDate': a.get('lastActiveDate', ''),
+                'found': not a.get('notFound', False),
+            }
+            for a in agents
+        ]))
+
+
 @agent.command('fetch')
 @click.argument('files', nargs=-1, required=True)
 @target_options
@@ -172,7 +286,7 @@ def get_agent(obj, name):
 @click.option('--timeout', '-t', default=300, help='Max seconds to wait for upload')
 @click.pass_obj
 @handle_errors
-def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, wait, output_dir, timeout):
+def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, hosts_file, wait, output_dir, timeout):
     """Fetch files from one or more agents.
 
     Requests agents to upload the specified files as an archive.
@@ -183,7 +297,9 @@ def fetch_files(obj, files, agent_names, group_ids, site_ids, target_all, wait, 
       sextant s1 agent fetch /etc/passwd -a myhost --wait
       sextant s1 agent fetch /var/log/syslog /etc/hosts -a host1 -a host2 -w
       sextant s1 agent fetch /tmp/report.log --group 12345 --wait
+      sextant s1 agent fetch /etc/passwd -f hosts.txt --wait
     """
+    agent_names = resolve_target_names(agent_names, hosts_file)
     agents = resolve_agents(obj['client'], agent_names, group_ids, site_ids, target_all)
     if not agents:
         raise LookupError('no agents matched the target filter')
@@ -351,20 +467,54 @@ def list_scripts(obj, query, os_types, limit):
     )
 
     if sys.stdout.isatty():
-        table = Table('id', 'name', 'os', 'type', 'description', title='Scripts')
+        table = Table('name', 'os', 'description', title='Scripts')
         for s in scripts:
             table.add_row(
-                s.get('id', ''),
                 s.get('scriptName', ''),
                 ', '.join(s.get('osTypes', [])),
-                s.get('scriptType', ''),
-                (s.get('scriptDescription', '') or '')[:60],
+                (s.get('scriptDescription', '') or '')[:80],
             )
         console = Console()
         console.print(table)
         console.print(f"total: {pagination.get('totalItems', len(scripts))}")
     else:
         click.echo(json.dumps(scripts))
+
+
+@script.command('get')
+@click.argument('script_name')
+@click.pass_obj
+@handle_errors
+def get_script(obj, script_name):
+    """Show script details and input instructions.
+
+    \b
+    Examples:
+      sextant s1 script get "My Script"
+    """
+    s = obj['client'].get_script(script_name)
+    if sys.stdout.isatty():
+        click.echo(click.style('Script Info', bold=True))
+        click.echo(f"  Name:         {s.get('scriptName', '')}")
+        click.echo(f"  ID:           {s.get('id', '')}")
+        click.echo(f"  OS:           {', '.join(s.get('osTypes', []))}")
+        click.echo(f"  Type:         {s.get('scriptType', '')}")
+        click.echo(f"  Description:  {s.get('scriptDescription', '')}")
+        click.echo(f"  Created by:   {s.get('createdByUser', '')}")
+
+        instructions = s.get('inputInstructions') or s.get('inputRequired')
+        if instructions:
+            click.echo()
+            click.echo(click.style('Input Instructions', bold=True))
+            click.echo(f"  {instructions}")
+
+        example = s.get('inputExample')
+        if example:
+            click.echo()
+            click.echo(click.style('Input Example', bold=True))
+            click.echo(f"  {example}")
+    else:
+        click.echo(json.dumps(s))
 
 
 def display_script_results(results):
@@ -406,28 +556,49 @@ def display_script_results(results):
 @script.command('run')
 @click.argument('script_name')
 @target_options
-@click.option('--wait', '-w', is_flag=True, help='Wait for completion and show results')
+@click.option('--bg', is_flag=True, help='Submit and return immediately without waiting for results')
+@click.option('--poll', is_flag=True, help='Poll until agents come online before executing (requires --agent or --file)')
+@click.option('--online-timeout', default=3600, help='Max seconds to wait for agents to come online')
 @click.option('--params', '-p', 'input_params', default=None, help='Input parameters for the script')
 @click.option('--description', '-d', 'description', default='sextant remote script execution', help='Task description')
 @click.option('--timeout', '-t', default=3600, help='Script runtime timeout in seconds')
 @click.option('--output', '-o', 'output_dir', default='/tmp', help='Directory to save result files')
 @click.pass_obj
 @handle_errors
-def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all,
-               wait, input_params, description, timeout, output_dir):
+def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all, hosts_file,
+               bg, poll, online_timeout, input_params, description, timeout, output_dir):
     """Execute a remote script on one or more agents.
+
+    By default, waits for completion and displays results. Use --bg to submit
+    and return immediately. Use --poll to wait for offline agents to come
+    online before executing (requires --agent or --file targeting).
 
     \b
     Examples:
       sextant s1 script run "My Script" -a myhost
-      sextant s1 script run "My Script" -a host1 -a host2 --wait
-      sextant s1 script run "My Script" --all --wait
-      sextant s1 script run "My Script" -a myhost -p "arg1 arg2" -w
+      sextant s1 script run "My Script" -a host1 -a host2
+      sextant s1 script run "My Script" --all --bg
+      sextant s1 script run "My Script" -a myhost -p "arg1 arg2"
+      sextant s1 script run "My Script" -f hosts.txt
+      sextant s1 script run "My Script" -f hosts.txt --poll
     """
+    agent_names = resolve_target_names(agent_names, hosts_file)
+
+    if poll:
+        if not agent_names:
+            raise click.UsageError('--poll requires --agent or --file targeting')
+
+        def on_poll(pending):
+            click.echo(f"waiting for {len(pending)} agent(s) to come online: {', '.join(sorted(pending))}", err=True)
+
+        agents = wait_for_online(obj['client'], agent_names, timeout=online_timeout, on_poll=on_poll)
+        agent_filter = {'ids': [a['id'] for a in agents]}
+    else:
+        agent_filter = build_agent_filter(
+            obj['client'], agent_names, group_ids, site_ids, target_all,
+        )
+
     script = obj['client'].get_script(script_name)
-    agent_filter = build_agent_filter(
-        obj['client'], agent_names, group_ids, site_ids, target_all,
-    )
 
     result = obj['client'].execute_script(
         script_id=script['id'],
@@ -444,7 +615,7 @@ def run_script(obj, script_name, agent_names, group_ids, site_ids, target_all,
     task_id = result.get('parentTaskId', '')
     click.echo(f"task started (id: {task_id}), affected: {result.get('affected', 0)}")
 
-    if wait and task_id:
+    if not bg and task_id:
         def on_poll(tasks):
             counts = {}
             for t in tasks:
