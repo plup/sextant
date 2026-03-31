@@ -201,6 +201,7 @@ def get_agent(obj, name):
         click.echo(f"  OS:         {a.get('osName', '')} ({a.get('osType', '')})")
         click.echo(f"  Version:    {a.get('agentVersion', '')}")
         click.echo(f"  Active:     {a.get('isActive', '')}")
+        click.echo(f"  Network:    {a.get('networkStatus', '')}")
         click.echo(f"  External IP:{a.get('externalIp', '')}")
         click.echo(f"  Domain:     {a.get('domain', '')}")
         click.echo(f"  Group:      {a.get('groupName', '')}")
@@ -243,24 +244,24 @@ def check_agents(obj, agent_names, group_ids, site_ids, target_all, hosts_file):
         raise LookupError('no agents matched the target filter')
 
     if sys.stdout.isatty():
-        table = Table('hostname', 'status', 'last active', title='Agent Status')
+        table = Table('hostname', 'status', 'network', 'last active', title='Agent Status')
         for a in agents:
             hostname = a.get('computerName', '')
             if a.get('notFound'):
                 status = '[yellow]not found[/yellow]'
+                network = ''
                 last_active = ''
-            elif a.get('isActive'):
-                status = '[green]online[/green]'
             else:
-                status = '[red]offline[/red]'
-            if not a.get('notFound'):
+                status = '[green]online[/green]' if a.get('isActive') else '[red]offline[/red]'
+                net = a.get('networkStatus', '')
+                network = '[green]connected[/green]' if net == 'connected' else f"[red]{net}[/red]" if net else ''
                 last_active = a.get('lastActiveDate', '')
                 if last_active:
                     try:
                         last_active = humanize(datetime.fromisoformat(last_active.replace('Z', '+00:00')).replace(tzinfo=None))
                     except (ValueError, AttributeError):
                         pass
-            table.add_row(hostname, status, last_active)
+            table.add_row(hostname, status, network, last_active)
         console = Console()
         console.print(table)
         online = sum(1 for a in agents if a.get('isActive'))
@@ -271,6 +272,7 @@ def check_agents(obj, agent_names, group_ids, site_ids, target_all, hosts_file):
             {
                 'hostname': a.get('computerName', ''),
                 'active': a.get('isActive', False),
+                'networkStatus': a.get('networkStatus', ''),
                 'lastActiveDate': a.get('lastActiveDate', ''),
                 'found': not a.get('notFound', False),
             }
